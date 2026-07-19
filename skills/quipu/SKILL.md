@@ -36,14 +36,21 @@ This is the **read** path. Its two siblings:
    about SPARQL, so it reads like the graph is broken when it's just the quoting. SPARQL ignores
    whitespace; one long line is fine. For long queries use the heredoc + `jq` form in step 2.
 
-3. **The response is Quipu's own shape, not SPARQL JSON.** You get
-   `{"count":N,"rows":[{"var":"value"}],"variables":[...],"truncated":bool}` — flat rows, values
-   already unwrapped. Do **not** write a parser for `results.bindings[].value`; there isn't one.
-   `ASK` returns `{"result":true}`; `CONSTRUCT` returns `{"count":N,"triples":[{subject,predicate,
-   object}]}`. Be aware this shape is **lossy**: a literal that looks like a URL is byte-identical
-   to a real IRI, and datatypes/language tags are dropped — so don't infer "this is a node" from a
-   value that starts with `http`. *(Tracked: **aegis-u7ag** proposes standard SPARQL 1.1 JSON via
-   `Accept:` negotiation. When that lands, this principle goes away.)*
+3. **The response shape is content-negotiated — pick the one that fits (aegis-u7ag, live).** The
+   `/query` endpoint honours the `Accept:` header:
+   - **Default / no `Accept` / `application/json`** — Quipu's own compact shape:
+     `{"count":N,"rows":[{"var":"value"}],"variables":[...],"truncated":bool}` — flat rows, values
+     already unwrapped. `ASK` returns `{"result":true}`; `CONSTRUCT` returns
+     `{"count":N,"triples":[{subject,predicate,object}]}`. Convenient, but **lossy**: a literal that
+     looks like a URL is byte-identical to a real IRI, and datatypes/language tags are dropped — so
+     don't infer "this is a node" from a value that starts with `http`.
+   - **`Accept: application/sparql-results+json`** — standard **W3C SPARQL 1.1 Results JSON**:
+     `{"head":{"vars":[...]},"results":{"bindings":[{"var":{"type":"uri"|"literal","value":...}}]}}`.
+     Use this when you need to tell an IRI from a literal — the `type` field disambiguates what the
+     default shape flattens away. `results.bindings[].value` **does** exist on this path.
+   - **`Accept: text/turtle` / `application/n-triples`** (CONSTRUCT only) — RDF serialization.
+   Note: even the standard JSON path still **does not** carry datatype/language tags faithfully
+   (aegis-fmyi) — so for datatyped/tagged literals, treat values as strings, not typed RDF terms.
 
 4. **One real thing is many nodes — never trust a clean-looking answer.** Entity resolution has
    never run (see Limits). "Dolt" is *seven* separate `DatabaseService` nodes today. A blast-radius
