@@ -20,6 +20,7 @@ report success it hasn't earned.
 
 | skill | what it does |
 |---|---|
+| **dispatch-work** | Hand a work item to another agent — create it, check the pane is ready, send via tmux, verify it landed. |
 | **homelab-deploy** | Deploy services to containers — binaries, configs, rollback. |
 | **homelab-patrol** | Health checks and diagnostics across a fleet. "What's broken?" |
 | **quipu** | Query a knowledge graph before you act — what do we already know about this thing? |
