@@ -57,6 +57,35 @@ Never record `in_progress` before a confirmed send. If you can't confirm, record
 nothing and re-dispatch — a human chasing a dropped message beats a tracker full
 of work nobody was told about.
 
+## Dispatch a live item, not a finished one
+
+The assignment is a **message**; the item's status is **state** — and they live in
+different places. "Go do X" is durable: it sits in a pane or an inbox until read.
+Marking X *done* does not retract that message. So an item finished after you
+queued it — or one someone else already completed — keeps getting dispatched, and
+nothing is watching the gap.
+
+This is not hypothetical. A dispatch that fired at an already-completed item cost a
+full duplicate build, found only when the second agent pushed and collided with the
+first. Both agents were reasoning about the *work*; the stale thing was the
+*assignment*, and you cannot check your way out of that from the receiving end. The
+only place to stop it is **before the message is sent**.
+
+So confirm the item is still open first — it is the one check the receiving agent
+cannot make for you:
+
+```bash
+python3 dispatch.py send <pane> <id> --open-check 'bd show {id} --json'
+```
+
+`--open-check` runs your command (with `{id}` substituted) and refuses the dispatch
+— exit 3, nothing sent — unless it exits 0. It is pluggable exactly like `create`:
+give it whatever your tracker needs to say "still open" (`gh issue view {id} --json
+state --jq '.state=="OPEN"'`, a grep over a status field, anything), and the tool
+stays blind to what a "bead" or an "issue" is. On the `st` path the same guard is
+`st go`'s refusal to dispatch an item another agent already holds — different
+surface, same rule: do not send work at an item that is no longer live.
+
 ## The `st` path (preferred)
 
 [shantytown](https://github.com/scbrown/shantytown) implements this whole
@@ -106,6 +135,15 @@ caveat in the *same payload* as the dispatch, so it cannot arrive after the
 worker has already acted. Use `--note-file` rather than `--note` for anything
 long or containing quotes — an inline double-quoted note is expanded by your
 shell before `st` sees it.
+
+**Send a pointer, not a restatement — the item is the source, your message is not.**
+A dispatch generated from an item's title or summary can already be *wrong* when it
+lands: a tracker's title lags its comments, so the blocker named in the body may
+have been retracted in an update an hour later. A message that says "do X because
+Y" freezes Y at send time; if Y has since flipped, you have sent the worker to
+chase a premise that no longer holds. So dispatch "go read `<id>`, and read its
+latest state" and let the worker act on the source of truth, not on your snapshot
+of it. This is why the send is a pointer to the id, never a copy of its contents.
 
 Everything below is the fallback path, and the traps in it apply to `st` too —
 it makes the same judgement on the same evidence.

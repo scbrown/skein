@@ -77,5 +77,42 @@ class TestTriageOutcomes(unittest.TestCase):
         self.assertIn("pane", dec.inputs)  # every decision names what it judged on
 
 
+class TestOpenCheckGuard(unittest.TestCase):
+    """The dispatch MESSAGE outlives the item's STATE, so a finished item keeps
+    getting dispatched unless something checks. `--open-check` is that check; these
+    prove it fires (refuse) and, as a control, that an open item still passes."""
+
+    def _swap(self, exists, capture, send):
+        self._e, self._c, self._s = d.pane_exists, d.pane_capture, d.pane_send
+        d.pane_exists, d.pane_capture, d.pane_send = exists, capture, send
+
+    def _restore(self):
+        d.pane_exists, d.pane_capture, d.pane_send = self._e, self._c, self._s
+
+    def test_closed_item_refuses_before_touching_the_pane(self):
+        touched = []
+        self._swap(lambda t: touched.append("exists") or True,
+                   lambda t: touched.append("capture") or "> ",
+                   lambda t, x: touched.append("send"))
+        try:
+            rc = d.main(["send", "x:0.0", "item-1", "--open-check", "false"])
+        finally:
+            self._restore()
+        self.assertEqual(rc, 3)                 # refused
+        self.assertEqual(touched, [])           # and never looked at the pane
+
+    def test_open_item_passes_the_guard(self):
+        sent = []
+        self._swap(lambda t: True,
+                   lambda t: "idle\n> item-1",  # id present -> send confirms
+                   lambda t, x: sent.append(x))
+        try:
+            rc = d.main(["send", "x:0.0", "item-1", "--open-check", "true"])
+        finally:
+            self._restore()
+        self.assertEqual(rc, 0)                 # delivered
+        self.assertTrue(sent)                   # the guard did not block a live item
+
+
 if __name__ == "__main__":
     unittest.main()

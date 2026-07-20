@@ -278,6 +278,19 @@ def cmd_send(args) -> int:
     target, item_id = args.pane, args.item_id
     hint = args.hint or f"Work is on your hook: {item_id} — go read it."
 
+    # OPEN-CHECK first: the item's STATE is separate from the dispatch MESSAGE, and
+    # a "done" state does not retract a queued message. Dispatching a finished item
+    # is how a tracker ends up lying about assigned work (and how a duplicate build
+    # gets funded). If given, the check must exit 0 for the item to be live; it is
+    # pluggable exactly like create — the tool stays blind to what "open" means.
+    if args.open_check:
+        chk = subprocess.run(args.open_check.format(id=item_id),
+                             shell=True, capture_output=True, text=True)
+        if chk.returncode != 0:
+            print(f"refused: --open-check exited {chk.returncode} for {item_id} — "
+                  f"the item is not open; not dispatching finished work", file=sys.stderr)
+            return 3
+
     if not pane_exists(target):
         print(f"error: pane {target} does not exist", file=sys.stderr)
         return 1
@@ -323,6 +336,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("pane", help="tmux target, e.g. session:0.0")
     s.add_argument("item_id", help="the id the agent will go fetch")
     s.add_argument("--hint", help="override the message sent (default: go read <id>)")
+    s.add_argument("--open-check", dest="open_check",
+                   help="shell template (with {id}); dispatch refuses (exit 3) unless it "
+                        "exits 0 — guards against dispatching a finished/closed item")
     s.set_defaults(func=cmd_send)
 
     return ap
