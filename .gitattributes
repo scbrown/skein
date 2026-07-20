@@ -1,0 +1,9 @@
+# A tracked TEXT file silently classified as BINARY is UNDIFFABLE, so no edit to it is
+# ever reviewable. That happened once to a skill read by a dozen agent clones and nobody
+# noticed for weeks. Skills are read by many and reviewed by few — they must stay
+# diffable from the first commit.
+*.md   text diff
+*.py   text diff
+*.sh   text diff
+*.toml text diff
+*.json text diff
