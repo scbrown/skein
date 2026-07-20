@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
-  <img src="https://img.shields.io/badge/skills-9-E39A4E.svg" alt="9 skills"/>
+  <img src="https://img.shields.io/badge/skills-11-E39A4E.svg" alt="11 skills"/>
   <img src="https://img.shields.io/badge/skein_runtime-none-3E9E9A.svg" alt="skein ships no runtime"/>
   <img src="https://img.shields.io/badge/install-copy%20a%20directory-8C98A8.svg" alt="Install is copying a directory"/>
   <img src="https://img.shields.io/badge/drives-bobbin%20·%20quipu%20·%20hank%20·%20st-6C7A89.svg" alt="Drives bobbin, quipu, hank, shantytown"/>
@@ -27,7 +27,7 @@ it cannot do when it isn't.**
 >
 > skein itself ships no runtime, no daemon, and no dependencies — a skill is markdown plus, at most,
 > a stdlib Python script, and installing one is `cp -r`. That is the *property*. But a skills layer
-> that drives nothing is a style guide. **Five of the nine skills want a service**: three need a
+> that drives nothing is a style guide. **Five of the eleven skills want a service**: three need a
 > [Quipu](https://github.com/scbrown/quipu) graph endpoint, one needs Prometheus, one needs a push
 > server. That is not a hidden cost — it is the point, and every skill states its dependency and its
 > degradation in a table at the top of the file.
@@ -216,6 +216,8 @@ lockfile, no build step.
 | 🧬 **graph-extract** | Extract entities and relationships from docs, code, and issues into the graph. | **Quipu endpoint** | **nothing.** Saves the payload; never claims a write |
 | 🗺️ **graph-report** | Live orientation report — size, central entities, suggested questions. | **Quipu endpoint** | **nothing.** Names the sections it couldn't compute |
 | 📋 **planning-with-files** | File-based planning that survives a context reset. | — | this one needs nothing at all |
+| 🚦 **deciding-when-to-ask** | Handle it yourself or bubble it up? Gate on reversibility / blast radius, route by type, batch approvals, tier by burn — so a coordinator only surfaces genuine human calls. | — | pure judgment discipline; a tracker/notify sharpen where escalations land |
+| 🪞 **session-retro** | A Stop hook that, once per session, harvests session friction into filed improvement issues. Fires once, not every turn; fails open. | — | files to a tracker if present, else a markdown backlog |
 
 ## ✨ Features
 
