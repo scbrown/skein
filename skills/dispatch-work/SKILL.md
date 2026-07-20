@@ -6,8 +6,9 @@ description: >
   do Y", "nudge an agent", or when you need one agent to pick up a task in
   another agent's session. Covers creating the item in any tracker, deciding
   whether the target agent's pane is ready to receive, sending via tmux, and
-  verifying the message actually landed. Portable: shell + tmux only, no
-  framework or service.
+  verifying the message actually landed. Drives the shantytown `st` CLI when it
+  is installed; falls back to a bundled stdlib engine over plain tmux when it
+  isn't. Portable: shell + tmux only, no framework or service.
 ---
 
 # Dispatch Work
@@ -23,8 +24,23 @@ send is `tmux send-keys` and nothing more. This skill is that pattern with the
 one hard part done right — deciding whether the pane is *ready*, and confirming
 the message *landed*.
 
-The engine is `dispatch.py` (stdlib + tmux only). You can run it directly, or
-follow the decision tree by hand.
+**Stack tools this reaches for**
+
+| Present | This skill uses it for | Absent — what happens |
+|---|---|---|
+| **[shantytown](https://github.com/scbrown/shantytown)** (`st`) | **the first-class path.** Dispatch, crew state, identity, durable messages | falls back to the bundled `dispatch.py` — same triage idea, less of it |
+| `tmux` | the send itself, either way | nothing works. This is the one hard requirement |
+| **[bobbin](https://github.com/scbrown/bobbin)** | `st context <query>` — attach the right files to the item before you send it | dispatch a bare title; the receiving agent starts by searching |
+| a tracker (`bd`, `gh`, files) | somewhere for the id to live | `--backend file` writes to a directory |
+
+**Reach for `st` first.** If `st --help` answers, use it: it does everything
+below and holds the identity/hierarchy state that `dispatch.py` has no place to
+keep. The bundled engine exists so this skill still works on a machine where
+shantytown isn't installed — not as the preferred route.
+
+```bash
+command -v st >/dev/null && echo "use st" || echo "use dispatch.py"
+```
 
 ## The one rule that matters
 
@@ -41,7 +57,65 @@ Never record `in_progress` before a confirmed send. If you can't confirm, record
 nothing and re-dispatch — a human chasing a dropped message beats a tracker full
 of work nobody was told about.
 
-## Step 1 — create the item
+## The `st` path (preferred)
+
+[shantytown](https://github.com/scbrown/shantytown) implements this whole
+sequence as one command, and adds the two things a standalone script cannot
+have: **who the agents are**, and **what each one is already holding.**
+
+```bash
+st crew                      # who exists, who is idle, who is busy
+st task "Fix the ingress 502s"   # create → prints an id
+st go <item> <agent>         # triage, dispatch, record — in that order
+st go <item> <agent> -n      # --dry-run: shows the verdict, writes nothing
+```
+
+Two refusals are the reason to prefer it, and both are refusals *by default*:
+
+- **It will not type into a busy pane.** `st go` consults triage first and
+  refuses rather than interrupt an agent mid-response.
+- **It will not silently steal an item another agent already holds.** Dispatching
+  an already-assigned item refuses unless you pass `--reassign`. A standalone
+  script has no idea an item is held; `st` does, because the tracker does.
+
+Exit codes (`st`'s own, and they are **not** `dispatch.py`'s — see below):
+
+| exit | meaning |
+|---:|---|
+| `0` | did it |
+| `1` | refused — nothing sent |
+| `2` | **couldn't tell** — never rounded up to success |
+
+The rest of the surface worth knowing here:
+
+| Command | What it answers |
+|---|---|
+| `st crew` | who can take the next item. `--count` prints just `busy/total` |
+| `st anchor [me]` | who am I, the one item on my plate, where my stop events go. A pure read |
+| `st inbox <agent> <msg>` | a message straight into a pane — `send-keys`, nothing between |
+| `st inbox <agent> <msg> -d` | **durable**: persists to the tracker *first*, then attempts the live send, so it survives a dead recipient |
+| `st context <query>` | what code this item is about ([bobbin](https://github.com/scbrown/bobbin) behind it) |
+
+**Use `-d` for anything that must survive the recipient's session dying** — a
+handoff, a protocol step. Use a plain send for routine nudges. An ephemeral
+message to an agent that is not there is reported as *couldn't tell*, never as
+delivered.
+
+**Attach the context, not just the title.** `st go --note-file <path>` delivers a
+caveat in the *same payload* as the dispatch, so it cannot arrive after the
+worker has already acted. Use `--note-file` rather than `--note` for anything
+long or containing quotes — an inline double-quoted note is expanded by your
+shell before `st` sees it.
+
+Everything below is the fallback path, and the traps in it apply to `st` too —
+it makes the same judgement on the same evidence.
+
+## The bundled fallback — `dispatch.py`
+
+For machines without shantytown. Stdlib + tmux only; run it directly, or follow
+the decision tree by hand.
+
+### Step 1 — create the item
 
 ```bash
 # beads / a GitHub-compatible forge / a flat file — pick your backend:
@@ -56,7 +130,7 @@ python3 dispatch.py create "Fix it" --create-cmd 'jira new "{title}" --plain'
 It prints the new id. The tool does **not** know what a bead or an issue is — it
 needs `create(title) → id`, nothing more. That is what makes it pluggable.
 
-## Step 2 — triage the target pane (read-only)
+### Step 2 — triage the target pane (read-only)
 
 Before you send, look at the pane. This touches nothing:
 
@@ -74,7 +148,7 @@ confident heuristic you can't inspect is worse than none:
 | **CLEAR** | High context, unrelated to the new task. | `/clear` (or cycle) the agent first, then send. |
 | **RESTART** | No session, or wedged. | Relaunch the session — see the trap below. |
 
-### The traps, paid for in production
+#### The traps, paid for in production — they apply to `st` too
 
 - **RESTART means relaunch from your launcher — never a "handoff"/cycle command
   that silently drops the session's hooks/settings.** A hook-less agent comes back
@@ -92,7 +166,7 @@ confident heuristic you can't inspect is worse than none:
   reads `capture-pane`, and why it reads the runtime's own token count rather than
   guessing from screen size.
 
-## Step 3 — send, verified
+### Step 3 — send, verified
 
 ```bash
 python3 dispatch.py send <session:win.pane> <item-id>
@@ -102,6 +176,13 @@ python3 dispatch.py send <session:win.pane> <item-id>
 it will not interrupt a working agent. On a healthy pane it sends, then reads the
 pane back for the id; if it isn't there it exits 2 (**sent but unconfirmed —
 record nothing**). Exit 0 means delivered *and confirmed*.
+
+> ⚠️ **`dispatch.py` and `st` do not share exit codes.** `dispatch.py` is
+> `0` delivered · `2` unconfirmed · `3` refused; `st` is `0` did it · `1`
+> refused · `2` couldn't tell. Both keep "couldn't confirm" separate from
+> success, which is the property that matters — but a wrapper that branches on
+> the number must know which tool it called. Do not copy a condition from one to
+> the other.
 
 Then, and only then, record the assignment in your tracker.
 

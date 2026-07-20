@@ -23,6 +23,18 @@ the extraction — the cheap, mechanical part — and POST a structured episode 
 pipeline, no worker pool, no job runner. It runs anywhere there's a shell and network access to the
 graph.
 
+**Stack tools this reaches for**
+
+| Present | This skill uses it for | Absent — what happens |
+|---|---|---|
+| **[Quipu](https://github.com/scbrown/quipu)** at `${GRAPH_URL}` | **required.** `POST /episode` is the entire write path | nothing is ingested. Save the assembled nodes/edges and retry — never report a write you did not observe |
+| **[quipu](../quipu/SKILL.md)** skill | checking whether an entity already exists, so facts attach instead of forking a duplicate | you will create a second node for a thing that already had one — see that skill's Limit (a) |
+| **[bobbin](https://github.com/scbrown/bobbin)** | reading the source material when it is a codebase rather than a document | `Read`/`Glob`/`Grep`, which is fine for a file and poor for a repo |
+
+**This skill requires a running Quipu endpoint.** It writes; there is no offline
+mode. If the graph is unreachable, the correct outcome is an explicit failure and
+a saved payload, not a shrug — see Failure Modes.
+
 **Skill resources:** the verified episode schema and the entity/relationship taxonomy are in
 `{baseDir}/references/episode-schema.md` and `{baseDir}/references/taxonomy.md`. Read them before
 your first POST.

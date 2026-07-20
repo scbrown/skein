@@ -13,9 +13,25 @@ description: >
 A patrol is a structured health check. You gather live data, compare it to
 expected state, and act on discrepancies. Never assume — always query.
 
+**Stack tools this reaches for**
+
+| Present | This skill uses it for | Absent — what happens |
+|---|---|---|
+| **[metrics-query](../metrics-query/SKILL.md)** (Prometheus/Alertmanager) | steps 1, 2 and 4 — alerts, target health, capacity trends | the `curl`/`ssh` probes below. You lose history and get a point-in-time guess |
+| **[quipu](../quipu/SKILL.md)** graph | "has this broken before, and what depends on it" before you touch anything | patrol on the raw finding alone; you will rediscover old incidents |
+| **[notify](../notify/SKILL.md)** | delivering the patrol report | print it and say explicitly that it was not sent |
+| **[bobbin](https://github.com/scbrown/bobbin)** | `bobbin search` when a finding points into a codebase you don't know | grep, slowly and blindly |
+| **[graph-extract](../graph-extract/SKILL.md)** | writing a durable finding back to the graph | the finding lives in one terminal and dies there |
+
 > **On tool names.** The `mcp__ops__*` calls below are an *example* ops MCP
 > server. Any equivalent works, and the shell fallbacks beside them always work.
 > The skill depends on the checks, not on a particular server.
+
+> **On the `../metrics-query/promq.py` paths below.** Those resolve when the
+> skills are installed side by side (`cp -r skein/skills/* ~/.claude/skills/`, or
+> pointing your agent at `skein/skills/`). If you copied this skill alone, the
+> raw `curl` beside every one of them is the whole check — nothing here needs
+> the sibling script.
 
 ## Patrol Decision Tree
 
@@ -32,22 +48,53 @@ expected state, and act on discrepancies. Never assume — always query.
 
 ### Step 1: Active Alerts
 
+Preferred — [metrics-query](../metrics-query/SKILL.md), which excludes silenced
+and inhibited alerts by default and tells you it did:
+
 ```bash
-curl -s http://<alertmanager>:9093/api/v2/alerts | jq '.[].labels.alertname'
+python3 ../metrics-query/promq.py alerts
+python3 ../metrics-query/promq.py alerts --include-silenced   # read this too
+```
+
+Raw fallback:
+
+```bash
+curl -s "${ALERTMANAGER_URL}/api/v2/alerts?active=true&silenced=false&inhibited=false" \
+  | jq '.[].labels.alertname'
 # or: mcp__ops__alertmanager_query  query_type="alerts"
 ```
 
-Check for firing alerts. Silenced alerts are acknowledged — focus on unsilenced.
+**Pass those query parameters explicitly.** Alertmanager's v2 API defaults
+`silenced` and `inhibited` to *true*, so the obvious `curl .../api/v2/alerts`
+counts alerts someone muted months ago as live incidents. And read the silenced
+list at least once per patrol — a silence that has outlived its reason is an
+alert you have decided not to see.
 
 ### Step 2: Scrape Targets
 
 ```bash
-curl -sG http://<prometheus>:9090/api/v1/query --data-urlencode 'query=up == 0'
+python3 ../metrics-query/promq.py query 'up == 0'   # exit 2 = EMPTY, not "healthy"
+python3 ../metrics-query/promq.py targets           # what discovery actually knows about
+```
+
+Raw fallback:
+
+```bash
+curl -sG "${PROM_URL}/api/v1/query" --data-urlencode 'query=up == 0'
 # or: mcp__ops__prometheus_query  query="up == 0"
 ```
 
 Any target returning `up == 0` is unreachable. Cross-reference with known
 issues in your tracker before filing new ones.
+
+**Two things `up == 0` cannot tell you, and both read as good news:**
+
+- **An empty result is not health.** No rows is also what a misspelled metric
+  returns — over HTTP 200. Confirm the series exists (`query 'up'`) before you
+  report green.
+- **A target dropped from service discovery has no `up` series at all.** It
+  cannot appear as down, because it cannot appear. Compare `targets` against your
+  own expected inventory — kept in your IaC repo, not in your head.
 
 ### Step 3: Key Services
 
@@ -115,13 +162,32 @@ Fleet: X alerts firing, Y services healthy
 Issues found: (list or "none")
 Filed: (IDs or "none")
 BODY
-<your-notify-command> --file /tmp/patrol.md
+python3 ../notify/notify.py -s warning -t "patrol" --file /tmp/patrol.md
 ```
 
 Write the body to a **file** rather than an inline double-quoted string. A report
 containing backticks or `$(...)` — and patrol reports quote commands constantly —
 gets expanded by your shell before the tool ever sees it. That failure is silent:
 the text either executes or is deleted, and the remaining sentence still scans.
+
+**Check the notifier's exit code before you write "reported" anywhere.**
+[notify](../notify/SKILL.md) exits `3` when no transport is configured — nothing
+was sent. A patrol that ends "report delivered" off an unchecked exit status has
+replaced one unverified claim with another, which is the exact thing this skill
+is against.
+
+## Feed what you learned back
+
+A finding that lives only in a terminal is a finding the next patrol repeats.
+
+- **Before touching a service**, ask the graph what depends on it —
+  [quipu](../quipu/SKILL.md), step 5 (blast radius), and read its Limit (a) first.
+- **After a real finding**, write it back with
+  [graph-extract](../graph-extract/SKILL.md) so the next agent finds it by
+  searching rather than by breaking the same thing again.
+- **If the finding points into code you don't know**, `bobbin search "<symptom>"`
+  and `hank impact <symbol>` beat grepping a repo you have never read. See
+  [homelab-deploy](../homelab-deploy/SKILL.md) for the blast-radius pattern.
 
 ## Anti-Patterns
 

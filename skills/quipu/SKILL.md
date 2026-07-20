@@ -19,6 +19,26 @@ Your homelab's operational memory is an RDF graph at `${GRAPH_URL}`. It knows wh
 depend on what, which host runs which container, what broke before and why. **Before you start a
 task, ask the graph about the entities the task names.** That is the whole skill.
 
+**Stack tools this reaches for**
+
+| Present | This skill uses it for | Absent — what happens |
+|---|---|---|
+| **[Quipu](https://github.com/scbrown/quipu)** at `${GRAPH_URL}` | **required.** Every query on this page is Quipu's HTTP API | the skill does nothing. There is no fallback and pretending otherwise would be the exact failure it warns about |
+| **[bobbin](https://github.com/scbrown/bobbin)** | the graph names a service; bobbin finds the code that implements it | you know *what* depends on it, not *where* it lives |
+| **[hank](https://github.com/scbrown/hank)** | blast radius inside one codebase, where the graph's edges stop | service-level dependencies only |
+
+**This skill requires a running Quipu endpoint** — that is a real dependency, and
+it is stated here rather than buried. Any RDF store speaking the same HTTP
+contract (`/query`, `/search`, `/stats`, `/episode`) works; `${GRAPH_URL}` is the
+only thing to change. But with no graph, there is nothing to degrade *to*: an
+operational memory you don't have cannot be approximated by grep, and this skill
+will not pretend it can.
+
+**Two graphs, two scopes** — the graph knows that `search-api` depends on
+`db-server`; [hank](https://github.com/scbrown/hank) knows that
+`parse_token()` is called by forty places inside it. Neither can answer the
+other's question. Blast radius usually needs both.
+
 This is the **read** path. Its two siblings:
 
 - **[graph-extract]** — *write*. Add knowledge (`POST /episode`). Do not hand-roll ingestion; use it.

@@ -5,44 +5,112 @@
 <h1 align="center">skein</h1>
 
 <p align="center">
-  <em>🧵 Portable agentic skills for running infrastructure</em>
+  <em>🧵 The skills layer for a local-first agent stack</em>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
-  <img src="https://img.shields.io/badge/skills-7-E39A4E.svg" alt="7 skills"/>
-  <img src="https://img.shields.io/badge/runtime-none-3E9E9A.svg" alt="No runtime"/>
-  <img src="https://img.shields.io/badge/requires-shell%20%2B%20HTTP-lightgrey.svg" alt="Requires shell and HTTP"/>
-  <img src="https://img.shields.io/badge/agents-any%20SKILL.md-8C98A8.svg" alt="Works with any agent that reads SKILL.md"/>
+  <img src="https://img.shields.io/badge/skills-9-E39A4E.svg" alt="9 skills"/>
+  <img src="https://img.shields.io/badge/skein_runtime-none-3E9E9A.svg" alt="skein ships no runtime"/>
+  <img src="https://img.shields.io/badge/install-copy%20a%20directory-8C98A8.svg" alt="Install is copying a directory"/>
+  <img src="https://img.shields.io/badge/drives-bobbin%20·%20quipu%20·%20hank%20·%20st-6C7A89.svg" alt="Drives bobbin, quipu, hank, shantytown"/>
+  <img src="https://img.shields.io/badge/agents-any%20SKILL.md-lightgrey.svg" alt="Works with any agent that reads SKILL.md"/>
 </p>
 
 > *A skein is a bundle of threads, tied so it can be carried. Pull one out when you need it.* 🧶
 
 **Skills for LLM coding agents** — Claude Code, Codex, Cursor, Gemini CLI, and anything else that
-reads a `SKILL.md`. They need **shell + HTTP and nothing else**: no framework, no runtime, no
-service to operate. Copy a directory in and it works.
+reads a `SKILL.md`. Each skill **drives a real tool when that tool is there, and says exactly what
+it cannot do when it isn't.**
 
-## Why this exists
+> **Portability is a property. Integration is the pitch.**
+>
+> skein itself ships no runtime, no daemon, and no dependencies — a skill is markdown plus, at most,
+> a stdlib Python script, and installing one is `cp -r`. That is the *property*. But a skills layer
+> that drives nothing is a style guide. **Five of the nine skills want a service**: three need a
+> [Quipu](https://github.com/scbrown/quipu) graph endpoint, one needs Prometheus, one needs a push
+> server. That is not a hidden cost — it is the point, and every skill states its dependency and its
+> degradation in a table at the top of the file.
 
-Most agent tooling assumes you're writing software. Almost none of it assumes you're **running
-infrastructure** — deploying to hosts you own, patrolling machines that drift, and remembering what
-broke six weeks ago. These are the skills an operator actually reaches for.
+## 🧱 The stack
 
-They came out of a live multi-agent homelab, so they encode things you only learn by being wrong:
-patrol before you trust a dashboard, query the graph before you name an entity, and never let a
-check report success it hasn't earned.
+skein is one layer of a local-first agent stack. Every other piece is a separate, public, standalone
+tool; skein is how an agent actually drives them.
 
-## See It In Action
+```text
+                    ┌──────────────────────────────────────┐
+                    │     your agent (any SKILL.md)        │
+                    └──────────────────┬───────────────────┘
+                                       │
+                    ┌──────────────────▼───────────────────┐
+                    │   skein — the skills layer           │   ← this repo
+                    │   how to drive the row below         │
+                    └──┬─────────┬─────────┬─────────┬─────┘
+                       │         │         │         │
+               ┌───────▼──┐ ┌────▼────┐ ┌──▼───┐ ┌───▼────────┐
+               │  bobbin  │ │  quipu  │ │ hank │ │ shantytown │
+               │   code   │ │ memory  │ │struct│ │  the crew  │
+               └───────┬──┘ └────┬────┘ └──┬───┘ └───┬────────┘
+                       │         │         │         │
+                    ┌──▼─────────▼─────────▼─────────▼─────┐
+                    │  shanty — the terminal you watch it  │
+                    │  all happen in                       │
+                    └──────────────────────────────────────┘
+```
+
+| tool | what it is | the question it answers | skills that drive it |
+|---|---|---|---|
+| **[bobbin](https://github.com/scbrown/bobbin)** | code search + git coupling | *what does this code say?* | homelab-deploy · homelab-patrol · planning-with-files · dispatch-work |
+| **[quipu](https://github.com/scbrown/quipu)** | RDF/SPARQL knowledge graph | *what do we already know?* | **quipu · graph-extract · graph-report** |
+| **[hank](https://github.com/scbrown/hank)** | code structure + policy guards | *what will this break?* | homelab-deploy · planning-with-files · quipu |
+| **[shantytown](https://github.com/scbrown/shantytown)** | agent crew harness (`st`) | *who does the work?* | **dispatch-work** |
+| **[shanty](https://github.com/scbrown/shanty)** | tmux wrapper + status bar | *where you watch it* | — |
+| **skein** | *this repo* | *how an agent drives all of it* | — |
+| [Prometheus](https://prometheus.io) / [Alertmanager](https://prometheus.io/docs/alerting/latest/alertmanager/) | metrics + alerting | *what is happening right now?* | **metrics-query** · homelab-patrol · homelab-deploy |
+| [ntfy](https://ntfy.sh) / any JSON webhook | push notification | *how a human finds out* | **notify** · homelab-patrol |
+
+Skills in **bold** *require* that tool — they have no offline mode and will say so rather than
+invent one. Everything else is an accelerant with a documented fallback.
+
+**On [Gas Town](https://github.com/gastownhall/gastown).** Gas Town is the heavyweight multi-agent
+workspace manager in this space — session lifecycle, work routing, scheduling, the whole town. We
+run a fleet on it. skein does not replace it and is not trying to: `dispatch-work` distils *one*
+capability out of that shape into something you can carry onto a machine that has never heard of a
+workspace manager. Reach for Gas Town when you want the whole workshop.
+
+## 🖥️ See It In Action
+
+**An empty answer is not a healthy one.** The most common false "all clear" in monitoring, given its
+own exit code:
+
+```text
+$ python3 promq.py query 'up == 0'
+EMPTY    query succeeded and matched 0 series: up == 0
+         This is NOT the same as healthy. Before reporting green, run the
+         selector bare (drop the comparison) and confirm the series exists.
+$ echo $?
+2
+```
+
+Prometheus answers a query that matched nothing with **HTTP 200** and an empty result — byte-for-byte
+the shape of good news, and also exactly what a misspelled metric returns. So `metrics-query`
+separates `EMPTY` (2) from `OK` (0), and you do what it says:
+
+```text
+$ python3 promq.py query 'up'
+               1  up{instance="host-a:9100",job="node"}
+               1  up{instance="host-b:9100",job="node"}
+$ echo $?
+0
+```
+
+*Now* `up == 0` returning nothing means something.
 
 **Handing work to another agent — and knowing it landed.**
 
 ```text
 $ python3 dispatch.py create "Fix the ingress 502s" --backend gh
 #128
-
-$ python3 dispatch.py triage harding:0.0 --hint "Fix the ingress 502s"
-REFUSE   in-flight work
-         inputs: marker='esc to interrupt' pane='harding:0.0'
 
 $ python3 dispatch.py send harding:0.0 '#128'
 REFUSE   in-flight work
@@ -52,18 +120,26 @@ $ echo $?
 3
 ```
 
-It refused to interrupt a working agent, and it showed you the input it judged on. A minute later:
+It refused to interrupt a working agent, and it showed you the input it judged on. Exit `0` means
+*delivered and confirmed*; exit `2` means sent-but-unconfirmed — record nothing and re-dispatch,
+because a tracker full of work nobody was told about is worse than a dropped message.
+
+That is the portable fallback. **With [shantytown](https://github.com/scbrown/shantytown) installed,
+`st go <item> <agent>` is the first-class path** — it makes the same judgement on the same evidence,
+plus two refusals a standalone script cannot make: it knows who the agents are (`st crew`), and it
+refuses to silently steal an item another agent already holds.
+
+**Nobody was told, and the tool says so.**
 
 ```text
-$ python3 dispatch.py send harding:0.0 '#128'
-delivered #128 -> harding:0.0
+$ python3 notify.py "disk 92% on host-b"
+NOTHING WAS SENT — no transport is configured.
+  Set NTFY_URL + NTFY_TOPIC, and/or NOTIFY_WEBHOOK_URL.
+  This is exit 3, never 0: an escalation path with no transport behind it
+  is not a quiet success, it is the outage you find out about tomorrow.
 $ echo $?
-0
+3
 ```
-
-`send` triages, sends, then reads the pane back looking for the id. Exit `0` means *delivered and
-confirmed*. Exit `2` means sent-but-unconfirmed — record nothing and re-dispatch, because a tracker
-full of work nobody was told about is worse than a dropped message.
 
 **Asking the graph before you touch a service.**
 
@@ -93,69 +169,55 @@ Seven nodes, one database. A blast-radius query against any *one* of them return
 looks exactly like a complete answer — which is worse than an error, because an error tells you it
 failed.
 
-**Orienting on a graph you've never seen.**
+## Why this exists
 
-```text
-> use graph-report
+Most agent tooling assumes you're writing software. Almost none of it assumes you're **running
+infrastructure** — deploying to hosts you own, patrolling machines that drift, and remembering what
+broke six weeks ago. These are the skills an operator actually reaches for.
 
-# Graph Report — graph.example.com
+They came out of a live multi-agent homelab, so they encode things you only learn by being wrong:
+patrol before you trust a dashboard, query the graph before you name an entity, and never let a
+check report success it hasn't earned.
 
-## Overview
-599 entities · 3,412 facts · 34 predicates
-
-## God nodes (schema + episode nodes excluded)
-1. db.example.com      DatabaseService   in-degree 41
-2. node01              BareMetalHost     in-degree 33
-3. traefik             ReverseProxyRoute in-degree 19
-
-## Suggested questions
-- What runs_on node01?
-- What depends_on db.example.com, transitively?
-- Which services have NO runs_on edge at all?
-```
-
-## Why Skein?
+## 🤔 Why Skein?
 
 |  | **Hand-rolled prompts** | **MCP servers** | **LangChain-style frameworks** | **Agent plugin systems** | **[Gas Town](https://github.com/gastownhall/gastown)** | **skein** |
 |--|:---:|:---:|:---:|:---:|:---:|:---:|
 | Agent-agnostic (no vendor format)     | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
-| No server or daemon to operate        | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ |
+| No server or daemon **of its own**    | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ |
 | Install = copy a directory            | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Version-controlled and diffable       | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | No language/runtime dependency        | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| States its degradation per capability | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Typed tool contract & auto-discovery  | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Multi-agent orchestration & lifecycle | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ |
 
 The last two rows are the honest ones. **skein is not an orchestrator and does not want to be.**
 
-[Gas Town](https://github.com/gastownhall/gastown) is a full multi-agent workspace manager — session
-lifecycle, work routing, the lot — and it does far more than a directory of markdown files can. We
-run a fleet on it. But operating a fleet taught us that handing work to another agent is a
-*surprisingly small* operation underneath: create an item, check the target pane is ready, send via
-`tmux`, verify it landed. `dispatch-work` distills exactly that one capability into something you
-can carry into any agent, on any machine, without adopting a workspace manager to get it. Reach for
-Gas Town when you want the whole workshop; reach for skein when you want one tool in your pocket.
+An MCP server is the closest comparison, and the difference is worth stating plainly: an MCP tool is
+a capability welded to a runtime and a host. A skill is the same capability *written down*, so it
+runs from any agent, on any machine, with a shell. Several skills here were generalised out of a
+private MCP server for exactly that reason — [`docs/proposed-skills.md`](docs/proposed-skills.md)
+records which ones survived the translation, and which were rejected for failing it.
 
-Requirements in full: `curl`, `tmux` (dispatch only), and Python 3 standard library (dispatch only).
-No packages, no lockfile, no build step.
+Requirements in full: `curl`, `tmux` (dispatch only), and Python 3 standard library. No packages, no
+lockfile, no build step.
 
-## The Skills
+## 🧵 The Skills
 
-| skill | what it does |
-|---|---|
-| 📮 **dispatch-work** | Hand a work item to another agent — create it, check the pane is ready, send via `tmux`, verify it landed. Refuses to interrupt a busy agent. |
-| 🚀 **homelab-deploy** | Deploy services to hosts — binaries, configs, IaC, rollback. IaC-first, verify-after. |
-| 🩺 **homelab-patrol** | Health checks and diagnostics across a fleet. "What's broken?" — answered from live data, never memory. |
-| 🔎 **quipu** | Query a knowledge graph before you act — what do we already know about this thing, and what is the graph *not* to be trusted about? |
-| 🧬 **graph-extract** | Extract entities and relationships from docs, code, and issues into the graph as a structured episode. |
-| 🗺️ **graph-report** | Orientation report over a graph — size, central entities, recent activity, suggested questions. |
-| 📋 **planning-with-files** | File-based planning for multi-step work. Survives a context reset. |
+| skill | what it does | needs | without it |
+|---|---|---|---|
+| 📮 **dispatch-work** | Hand a work item to another agent — check the pane is ready, send, verify it landed. Refuses to interrupt a busy agent. | `tmux`; `st` preferred | bundled stdlib engine over plain tmux |
+| 📈 **metrics-query** | PromQL queries, scrape-target health, alert triage — with an empty result reported as its own outcome, not as good news. | **Prometheus** / Alertmanager | **nothing.** Exits `3` and says it queried nothing |
+| 📣 **notify** | Push a finding to a human via ntfy or a JSON webhook, reporting per-transport acceptance. | **ntfy or a webhook** | **nothing.** Exits `3`: "NOTHING WAS SENT" |
+| 🚀 **homelab-deploy** | Deploy services — binaries, configs, IaC, rollback. IaC-first, verify-after. | — | full shell path; `hank`/`bobbin` sharpen blast radius |
+| 🩺 **homelab-patrol** | Health checks across a fleet. "What's broken?" — from live data, never memory. | — | full shell path; Prometheus adds history |
+| 🔎 **quipu** | Query the graph before you act — and what the graph is *not* to be trusted about. | **Quipu endpoint** | **nothing.** No offline mode, by design |
+| 🧬 **graph-extract** | Extract entities and relationships from docs, code, and issues into the graph. | **Quipu endpoint** | **nothing.** Saves the payload; never claims a write |
+| 🗺️ **graph-report** | Live orientation report — size, central entities, suggested questions. | **Quipu endpoint** | **nothing.** Names the sections it couldn't compute |
+| 📋 **planning-with-files** | File-based planning that survives a context reset. | — | this one needs nothing at all |
 
-The three graph skills assume a [Quipu](https://github.com/scbrown/quipu)-compatible RDF/SPARQL
-endpoint. `planning-with-files` uses optional Claude Code hooks; the file discipline itself is
-agent-agnostic. The rest assume nothing.
-
-## Features
+## ✨ Features
 
 🧵 **Portable by construction** — A skill is a `SKILL.md` and, at most, a stdlib Python script. There
 is no plugin API to target, so there is nothing to port when you change agents.
@@ -163,45 +225,59 @@ is no plugin API to target, so there is nothing to port when you change agents.
 🔌 **Zero install** — `cp -r skills/<skill> ~/.claude/skills/`. That's the whole procedure. No
 package manager, no lockfile, no build, no daemon to keep alive.
 
-🌐 **Shell + HTTP only** — Every integration is `curl` against a documented endpoint, or `tmux`
-against a pane. If you can reach it from a terminal, the skill works.
+🔗 **Reaches for the better tool first** — where a real tool does the job properly, the skill drives
+it: `st` for dispatch, `bobbin` for search, `hank` for blast radius, Quipu for memory, Prometheus
+for history. Where it isn't installed, the skill takes the documented fallback — or refuses, and
+says which.
 
-⚙️ **Config, not constants** — Every target is an environment variable (`GRAPH_URL`, `GRAPH_NS`,
-`DB_HOST`, `DISPATCH_*`). A skill that hardcodes a hostname is ours, not yours — and we treat one
+📉 **States its own degradation** — every skill opens with a table of what it uses and what happens
+without it. No skill silently substitutes a worse answer for the one you asked for.
+
+⚙️ **Config, not constants** — Every target is an environment variable (`GRAPH_URL`, `PROM_URL`,
+`NTFY_URL`, `DISPATCH_*`). A skill that hardcodes a hostname is ours, not yours — and we treat one
 that slips through as a bug.
 
 🧪 **Checks that can fail** — Every skill that verifies something documents how to *make it fail*.
-`dispatch-work` ships `test_dispatch.py` exercising all four triage outcomes. A health check that
-has never returned red is not a check.
+`dispatch-work`, `metrics-query` and `notify` ship unit tests that exercise **every** outcome,
+including the ones that look like good news. A health check that has never returned red is not a
+check.
 
-🚦 **Honest exit codes** — `dispatch.py` branches without parsing prose: `0` delivered and confirmed,
-`2` sent but unconfirmed, `3` refused because the pane wasn't ready. Ambiguity is a bug, not a
-nuance.
+🚦 **Honest exit codes** — Scripts branch without parsing prose. `promq.py`: `0` matched · `2`
+matched nothing · `1` API error · `3` unreachable. `notify.py`: `0` all accepted · `1` partial ·
+`2` all failed · `3` **nothing was sent**. Ambiguity is a bug, not a nuance.
 
 🧠 **Encodes the caveat, not just the API** — The `quipu` skill spends as much space on what the
 graph will *lie* to you about (unresolved duplicate entities, SHACL validating nothing, a swallowed
-HTTP 400 that reads as "0 results, all clean") as on how to query it.
+HTTP 400 that reads as "0 results, all clean") as on how to query it. `metrics-query` does the same
+for a 422 that parses cleanly, and for the target that cannot appear as down because it was dropped
+from service discovery.
 
 📋 **Survives a context reset** — `planning-with-files` keeps the plan, findings, and progress on
 disk, so a cleared session picks up where the last one stopped.
 
-## Configure
+## ⚙️ Configure
 
-Skills read their targets from the environment. Nothing is hardcoded — see `.env.example`:
+Skills read their targets from the environment. Nothing is hardcoded — see
+[`.env.example`](.env.example) for the annotated version.
 
-```bash
-export GRAPH_URL=http://graph.example.com         # quipu / graph-extract / graph-report
-export GRAPH_GROUP=my-ontology                    # graph partition to write into
-export GRAPH_NS=http://example.org/ontology/      # IRI base for your own entities & classes
-export SEARCH_URL=http://search.example.com       # optional: semantic code search
-export DB_HOST=db.example.com                     # optional: data plane
-export BEADS_DB=your_issues_db                    # optional: issue tracker db
-```
+| variable | used by | required? |
+|---|---|---|
+| `GRAPH_URL` | quipu · graph-extract · graph-report | **yes**, for those three |
+| `GRAPH_GROUP` | graph-extract | yes, to write |
+| `GRAPH_NS` | quipu · graph-extract | yes |
+| `PROM_URL` | metrics-query · homelab-patrol · homelab-deploy | **yes**, for `query` / `targets` |
+| `ALERTMANAGER_URL` | metrics-query · homelab-patrol | **yes**, for `alerts` |
+| `PROM_BEARER_TOKEN`, `PROM_TIMEOUT` | metrics-query | no |
+| `NTFY_URL` + `NTFY_TOPIC` | notify | **both or neither** — half is not a transport |
+| `NTFY_TOKEN` | notify | no |
+| `NOTIFY_WEBHOOK_URL` | notify | one transport is required — this or ntfy |
+| `NOTIFY_WEBHOOK_KEY` | notify | no — `text` (Slack/Mattermost) or `content` (Discord) |
+| `NOTIFY_MIN_SEVERITY`, `NOTIFY_PRIORITY_*`, `NOTIFY_TIMEOUT` | notify | no |
+| `SEARCH_URL` | homelab-patrol | no — remote bobbin |
+| `DB_HOST`, `BEADS_DB` | examples in quipu / patrol | no |
+| `DISPATCH_*` | dispatch-work fallback engine | no — `st` carries its own config |
 
-`dispatch-work` has its own knobs (busy-marker patterns, context thresholds, tracker backend) —
-all environment variables, documented in its `SKILL.md`.
-
-## Install
+## 📦 Install
 
 ```bash
 git clone https://github.com/scbrown/skein
@@ -216,12 +292,17 @@ Or point your agent's skill path straight at `skein/skills/`.
 - **A check must be able to fail.** If a health check has never returned red, it isn't a check.
   Every skill that verifies something says how to prove it can fail.
 - **Config, not constants.** A skill that hardcodes a hostname is ours, not yours.
+- **Reach for the real tool first, fall back second, and name which one you took.** A skill that
+  quietly degrades has told you nothing about the quality of its answer.
+- **Never report success you have not earned.** Not delivered, not verified, not queried — say so.
+  Every exit code in this repo exists to stop one of those distinctions from collapsing into `0`.
 
 ## Status
 
 Early. Extracted from a working homelab, generalised, and published with the intent of being useful
 to someone who isn't us. If a skill leaks an assumption about our environment, that's a bug — open
-an issue.
+an issue. Skills under consideration, and the ones deliberately rejected, are in
+[`docs/proposed-skills.md`](docs/proposed-skills.md).
 
 ## License
 
