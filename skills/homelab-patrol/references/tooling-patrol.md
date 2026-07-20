@@ -1,58 +1,63 @@
 # Tooling Patrol Reference
 
-For arnold and tooling/DX-focused agents.
+For tooling / developer-experience agents: CLIs, CI, git hygiene, MCP health.
 
 ## Tooling Checklist
 
 ### CLI Tools
 
 ```bash
-bd version          # beads CLI — check version, connectivity
-gt version          # gastown CLI — check version
+<tracker> version   # issue tracker CLI — check version and connectivity
+<agent-cli> version # agent/workspace CLI — check version
 ```
+
+Check *connectivity*, not just that the binary answers. A CLI that prints its
+version while its backing store is unreachable looks perfectly healthy.
 
 ### Git Health
 
 ```bash
-git status          # Clean workspace?
+git status            # Clean workspace?
 git log --oneline -5  # Recent commits look sane?
 ```
 
 ### CI Status
 
 ```promql
-# GitHub CI status (1=passing, 0=failing)
-github_ci_status
+# CI status (1=passing, 0=failing), if you export it
+ci_status
 
 # Per-repo check
-github_ci_status{repo="beads"}
-github_ci_status{repo="gastown"}
-github_ci_status{repo="bobbin"}
-github_ci_status{repo="tapestry"}
+ci_status{repo="search-api"}
+ci_status{repo="dashboard"}
 ```
 
 ### MCP Tools
 
-```text
-mcp__homelab__service_health  container="automation" service="homelab-mcp"
+```bash
+systemctl is-active ops-mcp
+# then call any cheap MCP tool and confirm it responds
 ```
 
-Quick verification: call any simple MCP tool and check it responds.
+A server that accepts a connection is not a server that serves. Call a real
+tool.
 
-### Forgejo
+### Git Hosting
 
-```text
-mcp__homelab__service_health  container="git.lan" service="forgejo"
-mcp__homelab__forgejo_runs    repo="YOUR_ORG/aegis"
+```bash
+curl -sf https://git.example.com/api/healthz
+# check recent CI runs for the repos you own
 ```
 
 ## Common Issues
 
-- **bd list slow**: Text mode is 25-37s due to N+1 query. Always use `--json`
-  when parsing programmatically (~0.16s).
-- **Dolt pool exhaustion**: Under heavy multi-agent load, connections may
-  max out (50 limit). Check `max_connections` if bd commands timeout.
-- **MCP event loop blocking**: Fixed via asyncio.to_thread (aegis-wgr3cr).
-  If MCP tools hang, check if blocking calls snuck back in.
-- **GitHub CI failures**: gastown Windows CI, E2E, and Nightly may fail
-  intermittently. Per guardrail: don't fix upstream unless blocking aegis.
+- **Slow list commands**: text-mode output in some trackers does an N+1 query and
+  takes tens of seconds. Use `--json` when parsing programmatically — often two
+  orders of magnitude faster.
+- **DB connection pool exhaustion**: under heavy multi-agent load, connections max
+  out and every CLI call hangs. Check `max_connections` before blaming the CLI.
+- **Async event-loop blocking**: a synchronous call inside an async MCP handler
+  blocks every other tool call on that server. If MCP tools hang under load, look
+  for blocking calls that snuck back in (`asyncio.to_thread` is the usual fix).
+- **Upstream CI flakes**: some upstream matrix jobs (Windows, E2E, nightly) fail
+  intermittently. Don't chase upstream failures unless they block *your* work.

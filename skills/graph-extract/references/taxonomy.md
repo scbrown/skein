@@ -1,26 +1,28 @@
-# Entity & relationship taxonomy (aegis ontology)
+# Entity & relationship taxonomy
 
 Use these controlled vocabularies for node `type` and edge `relation`. Reusing the canonical terms
 keeps facts attaching to existing entities instead of forking near-duplicates.
 
+This is a **starting vocabulary for infrastructure ontologies**, not a fixed schema. Extend it for
+your domain — but extend it *deliberately*, in this file, so every agent extracts against the same
+terms. Ad-hoc types invented inline are how a graph turns into seven nodes for one real thing.
+
 ## Entity `type` values
 
-**Infrastructure:** `LXCContainer`, `ProxmoxNode`, `BareMetalHost`, `SystemdService`,
-`WebApplication`, `DatabaseService`, `ZFSDataset`, `ReverseProxyRoute`, `NetworkSegment`
+**Infrastructure:** `Container`, `VirtualMachine`, `BareMetalHost`, `SystemdService`,
+`WebApplication`, `DatabaseService`, `StorageVolume`, `ReverseProxyRoute`, `NetworkSegment`
 
-**Agents & org:** `Rig`, `CrewMember`, `Polecat`, `Person`, `FamilyMember`, `GoogleAccount`
+**Agents & org:** `Agent`, `Team`, `Person`
 
-**Tools & artifacts:** `CLI`, `MCPServer`, `Plugin`, `Skill`, `Formula`, `GitRepo`, `GitCommit`,
+**Tools & artifacts:** `CLI`, `MCPServer`, `Plugin`, `Skill`, `Workflow`, `GitRepo`, `GitCommit`,
 `ConfigFile`, `Script`, `CronJob`, `AnsibleRole`, `DockerImage`
 
 **Declared (IaC) — see "Declared vs observed" below:** `AnsibleGroup`, `TerraformResource`
 
-**Knowledge & governance:** `Directive`, `Observation`, `DecisionRecord`, `DesignDoc`, `Bead`
-
-**Media & domain:** `MediaLibrary`, `Movie`, `TVSeries`, `ThemePark`
+**Knowledge & governance:** `Directive`, `Observation`, `DecisionRecord`, `DesignDoc`, `Issue`
 
 > **If the right type genuinely doesn't exist: STOP and ask a human. Do not pick the closest.**
-> (Corrected 2026-07-19, aegis-7kx4 — this note used to say "pick the closest and note the gap",
+> (Corrected 2026-07-19 — this note used to say "pick the closest and note the gap",
 > which is wrong in the one case it governs. "Closest" for 30 terraform resources is `ConfigFile`,
 > and that answer is not a near-miss — it silently files declared infrastructure as observed
 > config, which is the exact merge the layer rule below exists to prevent. A noted gap in a
@@ -61,23 +63,23 @@ a declared node whose provenance you cannot cite is a claim, not a fact.
 **Declared -> observed:** `provisions` (a declared IaC artifact creates a running thing —
 never a substitute for merging the two nodes)
 
-> Edge direction is `source <relation> target` (e.g. `${SEARCH_URL} runs_on tagi`;
-> `mol-ontology-ingest authored_by obsidian`). Pick the direction that reads as a true sentence.
+> Edge direction is `source <relation> target` (e.g. `search-api runs_on node01`;
+> `deploy.yml authored_by alice`). Pick the direction that reads as a true sentence.
 
-## Worked example (a closed incident bead → episode)
+## Worked example (a closed incident report → episode)
 
 Source: a P0 about a stale service binary on a host.
 
 ```json
 {
   "nodes": [
-    {"name": "${SEARCH_URL}", "type": "WebApplication", "description": "bobbin FTS search, HTTP :3000"},
-    {"name": "tagi", "type": "ProxmoxNode", "description": "Proxmox host running ${SEARCH_URL}"},
-    {"name": "deploy.yml", "type": "Script", "description": "Forgejo deploy workflow for bobbin"}
+    {"name": "search-api", "type": "WebApplication", "description": "full-text search, HTTP :3000"},
+    {"name": "node01", "type": "BareMetalHost", "description": "host running search-api"},
+    {"name": "deploy.yml", "type": "Script", "description": "CI deploy workflow for search-api"}
   ],
   "edges": [
-    {"source": "${SEARCH_URL}", "target": "tagi", "relation": "runs_on"},
-    {"source": "deploy.yml", "target": "tagi", "relation": "deployed_on"}
+    {"source": "search-api", "target": "node01", "relation": "runs_on"},
+    {"source": "deploy.yml", "target": "node01", "relation": "deployed_on"}
   ]
 }
 ```

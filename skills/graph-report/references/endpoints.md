@@ -1,4 +1,4 @@
-# Quipu read endpoints (live, ${GRAPH_URL} — verified against deployed 0.3.0)
+# Quipu read endpoints (live, `${GRAPH_URL}` — verified against quipu 0.3.0)
 
 All POST bodies are JSON; `/stats` is GET.
 
@@ -30,10 +30,10 @@ Also exclude **class nodes** — anything returned by:
 ```json
 {"query": "SELECT DISTINCT ?c WHERE { ?x a ?c }"}
 ```
-(these are the `LXCContainer` / `WebApplication` / `SystemdService` … type nodes, which top PageRank
-because every instance `rdf:type`-points to them). The aegis ontology IRI base is
-`http://aegis.gastown.local/ontology/` — classes and instances share it, so filter by the rdf:type
-query above, NOT by namespace prefix, for the aegis base.
+(these are the `Container` / `WebApplication` / `SystemdService` … type nodes, which top PageRank
+because every instance `rdf:type`-points to them). Your own ontology base is `${GRAPH_NS}` — classes
+and instances typically **share** it, so filter your own base by the rdf:type query above, NOT by
+namespace prefix.
 
 ## Useful orientation queries
 
@@ -67,5 +67,5 @@ SELECT ?p ?o ?ol WHERE { <HUB_IRI> ?p ?o . OPTIONAL { ?o rdfs:label ?ol } }
 
 ## Note
 
-`regex(str(?l))` FILTERs on `rdfs:label` are unreliable on this deployment — they can return 0 for
+`regex(str(?l))` FILTERs on `rdfs:label` are unreliable on this Quipu — they can return 0 for
 labels that exist. Prefer structural queries (by predicate / type / IRI) over label-regex.

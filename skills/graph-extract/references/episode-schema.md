@@ -34,12 +34,12 @@ unknown fields are silently dropped, and missing required edge fields cause an H
 - Do NOT rely on a SPARQL `regex(str(?l))` self-check to confirm — that FILTER is unreliable on
   this deployment. The `count` + `tx_id` in the POST response is the authoritative signal.
 
-## Outdated format — do NOT use
+## Lookalike format — do NOT use
 
-`docs/ontology-extraction-guide.md` historically documented a graphiti-style schema
-(`labels` / `summary` / `fact` / `source_node_name` / `target_node_name`). The current Quipu
-REJECTS that with HTTP 400 ("missing field source"). Use the entity LABELS and RELATIONSHIP
-vocabulary from the taxonomy, but the JSON SHAPE above.
+Graphiti-style extraction guides document a different schema
+(`labels` / `summary` / `fact` / `source_node_name` / `target_node_name`), and an LLM that has seen
+one will reach for it. Quipu REJECTS that with HTTP 400 ("missing field source"). Use the entity
+LABELS and RELATIONSHIP vocabulary from the taxonomy, but the JSON SHAPE above.
 
 ## Forward-looking: confidence qualifier
 

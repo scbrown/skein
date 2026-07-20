@@ -6,7 +6,7 @@ description: >-
   cross-community connections. Portable: shell + HTTP to ${GRAPH_URL} only, runs from any LLM agent.
   Triggers on "graph report", "summarize the knowledge graph", "what's in the ontology",
   "orient me on the graph", "graph-report", "what are the key entities", or when someone needs a
-  map of the graph before diving in. This is the graphify GRAPH_REPORT.md equivalent, but live.
+  map of the graph before diving in. It is a static GRAPH_REPORT.md equivalent, but computed live.
 allowed-tools:
   - Bash
   - Read
@@ -14,9 +14,9 @@ allowed-tools:
 
 # graph-report — orient on the Quipu knowledge graph
 
-Graphify hands you a `GRAPH_REPORT.md` (god nodes, surprises, suggested questions) after building a
-graph. This skill produces the same orientation **live** from Quipu, over HTTP — no static file, no
-Gas Town coupling. It pairs with [graph-extract] (which fills the graph).
+Graph-building tools hand you a `GRAPH_REPORT.md` (god nodes, surprises, suggested questions) once,
+at build time — and it is stale the next day. This skill produces the same orientation **live** from
+Quipu, over HTTP: no static file, no framework. It pairs with [graph-extract] (which fills the graph).
 
 **Graph endpoint:** `${GRAPH_URL}` (group `${GRAPH_GROUP}`). See
 `{baseDir}/references/endpoints.md` for the exact request shapes and the schema-node filter list.
@@ -37,7 +37,7 @@ Gas Town coupling. It pairs with [graph-extract] (which fills the graph).
    "surprising connection" to fill space.
 
 3. **Every hub becomes a question.** The point of orientation is the next query. For each top hub,
-   emit a concrete follow-up ("What runs on `tagi`?", "What depends on `${SEARCH_URL}`?").
+   emit a concrete follow-up ("What runs on `node01`?", "What depends on `search-api`?").
 
 ## Workflow
 
@@ -54,23 +54,22 @@ curl -s ${GRAPH_URL}/stats        # {entities, facts, predicates}
   `{baseDir}/references/endpoints.md`). The top ~10 survivors are your god nodes.
 - **At current graph scale, complement PageRank with in-degree** — on a young, episode-dense graph
   PageRank is flat across domain nodes, so also rank by incoming domain edges (query in
-  endpoints.md) and merge. This surfaces referenced infrastructure (e.g. `tagi`) that PageRank
+  endpoints.md) and merge. This surfaces referenced infrastructure (e.g. a busy host) that PageRank
   alone buries under episode noise.
 - For each hub, fetch its label/type for a readable name and its neighbourhood (endpoints.md).
 
 ### 3. Recent activity — what was ingested lately
-The graph's changelog is its episodes. **Caveat (deployed quipu 0.3.0):** episodes do NOT carry a
-structured `prov:atTime` — the date lives inside the `rdfs:comment` text. So you can't `ORDER BY`
-time in SPARQL. Options, best-first:
+The graph's changelog is its episodes. **Caveat (quipu 0.3.0):** episodes do NOT carry a structured
+`prov:atTime` — the date lives inside the `rdfs:comment` text. So you can't `ORDER BY` time in
+SPARQL. Options, best-first:
 - If `GET /transactions` is available, use it for true commit order.
 - Else list episodes and read the dates from their comments:
   `POST /query {"query":"PREFIX prov:<http://www.w3.org/ns/prov#> PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#> SELECT ?l ?c WHERE { ?a a prov:Activity ; rdfs:label ?l ; rdfs:comment ?c }"}`
   and sort client-side on the leading `YYYY-MM-DD` in each comment.
-- The server-side `/report` endpoint (hq-ct27) will expose proper recency; until then this is best-effort.
+- A server-side `/report` endpoint will eventually expose proper recency; until then this is best-effort.
 
 ### 4. Surprising connections
-- **When community detection is available** (quipu `quipu:memberOfCommunity` facts, bead hq-zlph):
-  rank edges whose endpoints sit in *different* communities and whose predicate is *rare* between
+- **When community detection is available** (quipu `quipu:memberOfCommunity` facts): rank edges whose endpoints sit in *different* communities and whose predicate is *rare* between
   those communities — those are the anomalies worth a human's eye.
 - **v1 fallback (today, no communities):** surface entities that participate in an unusually *wide
   variety of predicates* (a node tying together many relation types is a structural bridge). Query
@@ -96,7 +95,7 @@ Suggested questions.** Keep it scannable — this is a map, not a dump.
 
 ## Portability notes
 
-Depends only on `curl` + the Quipu HTTP API. The `/report` endpoint (bead hq-ct27) will eventually
-compute god-nodes/surprises/questions server-side in one call; until then this skill composes the
-existing `/stats` + `/project` + `/query` endpoints. Point the endpoint elsewhere to report on a
-different graph.
+Depends only on `curl` + the Quipu HTTP API. A server-side `/report` endpoint may eventually
+compute god-nodes/surprises/questions in one call; until then this skill composes the existing
+`/stats` + `/project` + `/query` endpoints. Point `${GRAPH_URL}` elsewhere to report on a different
+graph.

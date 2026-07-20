@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-labelledby="skein-title skein-desc">
+  <title id="skein-title">skein</title>
+  <desc id="skein-desc">A skein of yarn — several threads twisted into a figure-eight bundle and tied with a band.</desc>
+
+  <!-- Threads. Each is the same twisted loop, rotated and nudged, so the bundle
+       reads as strands rather than one fat outline. Colours chosen to hold
+       contrast on both white and dark backgrounds. -->
+  <g fill="none" stroke-linecap="round" stroke-width="7">
+
+    <g stroke="#C2703A" opacity="0.95">
+      <path transform="rotate(-9 100 100) translate(0 -7)"
+            d="M100 100 C 128 62, 178 64, 179 100 C 180 138, 128 138, 100 100
+               C 72 62, 20 64, 21 100 C 22 138, 72 138, 100 100 Z"/>
+    </g>
+
+    <g stroke="#E39A4E">
+      <path transform="rotate(-4 100 100) translate(0 -3)"
+            d="M100 100 C 128 62, 178 64, 179 100 C 180 138, 128 138, 100 100
+               C 72 62, 20 64, 21 100 C 22 138, 72 138, 100 100 Z"/>
+    </g>
+
+    <g stroke="#3E9E9A">
+      <path d="M100 100 C 128 62, 178 64, 179 100 C 180 138, 128 138, 100 100
+               C 72 62, 20 64, 21 100 C 22 138, 72 138, 100 100 Z"/>
+    </g>
+
+    <g stroke="#2F7F86">
+      <path transform="rotate(4 100 100) translate(0 3)"
+            d="M100 100 C 128 62, 178 64, 179 100 C 180 138, 128 138, 100 100
+               C 72 62, 20 64, 21 100 C 22 138, 72 138, 100 100 Z"/>
+    </g>
+
+    <g stroke="#C2703A" opacity="0.95">
+      <path transform="rotate(9 100 100) translate(0 7)"
+            d="M100 100 C 128 62, 178 64, 179 100 C 180 138, 128 138, 100 100
+               C 72 62, 20 64, 21 100 C 22 138, 72 138, 100 100 Z"/>
+    </g>
+  </g>
+
+  <!-- The tie: the band that makes a pile of thread into a skein. -->
+  <rect x="86" y="66" width="28" height="68" rx="12" fill="#8C98A8"/>
+  <rect x="93" y="66" width="6" height="68" fill="#B8C2CE" opacity="0.75"/>
+
+  <!-- A loose end, because a real skein always has one. -->
+  <path d="M175 118 C 189 130, 176 146, 162 141"
+        fill="none" stroke="#E39A4E" stroke-width="6" stroke-linecap="round"/>
+</svg>

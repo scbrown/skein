@@ -5,18 +5,20 @@ is healthy BEFORE deploying (so you have a baseline) and AFTER.
 
 ## Service Registry
 
-| Service | Repo | Container | Binary Path | Port | Health |
-|---------|------|-----------|-------------|------|--------|
-| bobbin | YOUR_ORG/bobbin | tagi.lan (physical host) | /usr/local/bin/bobbin | 3000 | /healthz |
-| beads (bd) | scbrown/beads | automation.lan (CT 205) | /usr/local/bin/bd | CLI | `bd version` |
-| homelab-mcp | YOUR_ORG/homelab-mcp | automation.lan (CT 205) | /opt/homelab-mcp/ | 8090 | /health |
-| tapestry | YOUR_ORG/tapestry | tapestry.lan (CT 227) | /usr/local/bin/tapestry | 8070 | /healthz |
-| reactor | YOUR_ORG/reactor | ${DB_HOST} (CT 236) | /opt/reactor/ | 8075 | /health |
-| aegis-irc | aegis deploy/ | bot.lan (CT 201) | /opt/aegis-irc/ | 8099 | /health |
-| aegis-tg | aegis deploy/ | automation.lan (CT 205) | /opt/aegis-tg/ | 8071 | /health |
-| message-router | aegis deploy/ | bot.lan (CT 201) | /opt/message-router/ | 8070 | /health |
+Keep a table like this one in your own IaC repo (`docs/service-catalog.yml` or equivalent) and
+point this file at it. The rows below are an **example shape**, not a real fleet — replace them.
 
-## Go Binary Deploy (bobbin, tapestry, beads)
+| Service | Repo | Host | Binary Path | Port | Health |
+|---------|------|------|-------------|------|--------|
+| search-api | example-org/search-api | node01 | /usr/local/bin/search-api | 3000 | /healthz |
+| issues (cli) | example-org/issues | app01 | /usr/local/bin/issues | CLI | `issues version` |
+| ops-mcp | example-org/ops-mcp | app01 | /opt/ops-mcp/ | 8090 | /health |
+| dashboard | example-org/dashboard | app01 | /usr/local/bin/dashboard | 8070 | /healthz |
+| eventd | example-org/eventd | ${DB_HOST} | /opt/eventd/ | 8075 | /health |
+| chat-bridge | example-org/infra `deploy/` | bot01 | /opt/chat-bridge/ | 8099 | /health |
+| message-router | example-org/infra `deploy/` | bot01 | /opt/message-router/ | 8070 | /health |
+
+## Compiled Binary Deploy (Go, Rust, …)
 
 ```bash
 # 1. Build locally
@@ -24,11 +26,12 @@ cd <worktree>
 go build -o <binary> ./cmd/<name>
 # or: GOOS=linux GOARCH=amd64 go build -o <binary> ./cmd/<name>
 
-# 2. Copy to container
-scp <binary> root@<container>:/tmp/<binary>-new
+# 2. Copy to the host
+scp <binary> root@<host>:/tmp/<binary>-new
 
-# 3. Deploy on container (via MCP batch_probe or SSH)
+# 3. Deploy on the host (over SSH, or via your ops MCP server)
 systemctl stop <service>
+cp <binary-path> <binary-path>.bak      # rollback point — do this BEFORE overwriting
 cp /tmp/<binary>-new <binary-path>
 chmod 755 <binary-path>
 systemctl start <service>
@@ -38,13 +41,13 @@ systemctl is-active <service>
 curl -sf http://localhost:<port>/healthz
 ```
 
-## Python Service Deploy (homelab-mcp, reactor, aegis-tg)
+## Interpreted Service Deploy (Python, Node, …)
 
 ```bash
-# 1. Push code to git.svc
+# 1. Push code
 git push
 
-# 2. Pull on container (via MCP batch_probe)
+# 2. Pull on the host
 cd /opt/<service> && git pull
 
 # 3. Restart
@@ -55,18 +58,18 @@ systemctl is-active <service>
 curl -sf http://localhost:<port>/health
 ```
 
-## Deploy Artifacts in aegis (aegis-irc, message-router, aegis-tg)
+## Services That Live In The Infra Repo
 
-These services have source code in the aegis repo under `deploy/<service>/`.
-The deploy flow is the same as Python services but source is in aegis, not
-a separate repo.
+Some small services have their source inside the infra/ops repo itself, under
+`deploy/<service>/`. The deploy flow is identical to the interpreted-service
+flow above — only the source location differs.
 
 ## Rollback
 
 If deploy fails:
 
-1. Check logs: `mcp__homelab__container_logs` or `journalctl -u <service> -n 50`
-2. If binary deploy: restore backup (`cp <binary>.bak <binary-path>`)
-3. If Python: `git checkout HEAD~1` on container
-4. Restart service
-5. File a bead for the failed deploy with error details
+1. Check logs: `journalctl -u <service> -n 50`
+2. Compiled binary: restore the backup (`cp <binary-path>.bak <binary-path>`)
+3. Interpreted: `git checkout HEAD~1` on the host
+4. Restart the service
+5. File an issue for the failed deploy with the error details

@@ -1,11 +1,11 @@
 ---
 name: graph-extract
 description: >-
-  Extract entities and relationships from source material (text, docs, code, beads, PDFs) and
+  Extract entities and relationships from source material (text, docs, code, issues, PDFs) and
   ingest them into a Quipu knowledge graph as a structured episode. Portable: works from any LLM
-  agent — it only needs shell/HTTP, not Gas Town formulas. Triggers on "extract to graph",
+  agent — it only needs shell and HTTP, no framework. Triggers on "extract to graph",
   "ingest into quipu", "build knowledge graph from", "graph-extract", "add this to the ontology",
-  or when asked to capture knowledge from a document/bead/repo into the graph. Auto-detects two
+  or when asked to capture knowledge from a document/issue/repo into the graph. Auto-detects two
   modes: a pre-specified ingest request (entities/relationships already listed) or raw source
   material to extract from scratch.
 allowed-tools:
@@ -18,17 +18,17 @@ allowed-tools:
 
 # graph-extract — source material → Quipu knowledge graph
 
-This skill is the portable, LLM-agnostic replacement for the `mol-ontology-ingest` Gas Town
-formula. **You** (the agent) do the extraction — the cheap, mechanical part — and POST a structured
-episode to Quipu's HTTP API. No polecat, no sling, no `bd cook`. It runs anywhere there's a shell
-and network access to the graph.
+This skill is the portable, LLM-agnostic way to get knowledge into a graph. **You** (the agent) do
+the extraction — the cheap, mechanical part — and POST a structured episode to Quipu's HTTP API. No
+pipeline, no worker pool, no job runner. It runs anywhere there's a shell and network access to the
+graph.
 
 **Skill resources:** the verified episode schema and the entity/relationship taxonomy are in
 `{baseDir}/references/episode-schema.md` and `{baseDir}/references/taxonomy.md`. Read them before
 your first POST.
 
-**Graph endpoint:** `${GRAPH_URL}/episode` (group `${GRAPH_GROUP}`). Use the `.svc` hostname —
-never a raw `192.168.x.x` IP.
+**Graph endpoint:** `${GRAPH_URL}/episode` (group `${GRAPH_GROUP}`). Set it to a **hostname**,
+never a raw private IP — IPs move, and a hardcoded one turns a portable skill into yours only.
 
 ## Essential Principles
 
@@ -36,7 +36,7 @@ never a raw `192.168.x.x` IP.
    required. Only assert what the source material actually states. If you're guessing, tag it (see
    confidence, principle 5) rather than inventing a clean-looking fact.
 
-2. **Name entities concretely and canonically.** `tagi`, not "the host". `${SEARCH_URL}`, not "the
+2. **Name entities concretely and canonically.** `node01`, not "the host". `search-api`, not "the
    search service". Reuse names already in the graph so facts attach to existing entities instead
    of forking duplicates — query first (`/query`) when unsure, or use Quipu's resolve step.
 
@@ -56,11 +56,11 @@ never a raw `192.168.x.x` IP.
 
 ### 1. Detect mode and gather source material
 - **Pre-spec mode** — the request already lists `ENTITIES:` / `RELATIONSHIPS:` and names source
-  bead(s) ("extract knowledge from <SRC>"). Read each SRC fully; the listed entities/relationships
+  issue(s) ("extract knowledge from <SRC>"). Read each SRC fully; the listed entities/relationships
   are your backbone — your job is to structure them and write accurate descriptions.
-- **Raw mode** — you're handed a document, file, repo path, or bead. THAT is the source. Read it in
-  full (`Read`/`Glob`/`Grep` for files; `WebFetch` for URLs; `bd show <id>` for beads if available).
-  Follow references inside it (linked beads, commit hashes, file paths) one hop.
+- **Raw mode** — you're handed a document, file, repo path, or issue. THAT is the source. Read it in
+  full (`Read`/`Glob`/`Grep` for files; `WebFetch` for URLs; your tracker's show command for issues).
+  Follow references inside it (linked issues, commit hashes, file paths) one hop.
 
 ### 2. Extract nodes and edges
 Map the material onto the taxonomy in `{baseDir}/references/taxonomy.md`:
@@ -90,15 +90,15 @@ curl -s -m 20 -w '\nHTTP %{http_code}\n' ${GRAPH_URL}/episode -X POST \
 Episode `name`: `ingest-<src-id>` for a pre-spec'd source, or `<topic>-<date>` for raw material.
 
 ### 4. Confirm and (optionally) annotate the source
-- On HTTP 200 + `count > 0` + `tx_id`: done. If you read from a bead and have `bd`, label the
-  source `ontology-ingested` so it isn't re-processed.
+- On HTTP 200 + `count > 0` + `tx_id`: done. If you read from a tracker issue, label the source
+  `ontology-ingested` so it isn't re-processed.
 - The episode is now queryable: `POST /query` (SPARQL) or `/search_nodes`.
 
 ## Failure Modes
 
 | Situation | Action |
 |-----------|--------|
-| ${GRAPH_URL} unreachable / non-200 / `count: 0` | Do NOT mark the source ingested. Save the assembled `nodes`/`edges` (note: `KNOWLEDGE-PENDING-INGESTION`) so a retry re-runs cleanly. |
+| `${GRAPH_URL}` unreachable / non-200 / `count: 0` | Do NOT mark the source ingested. Save the assembled `nodes`/`edges` (note: `KNOWLEDGE-PENDING-INGESTION`) so a retry re-runs cleanly. |
 | < 2 nodes or < 1 edge extractable | Skip — nothing knowledge-worthy. Say so explicitly. |
 | Referenced source missing | Ingest what's available; don't fail the whole run. |
 | SHACL validation rejects the write (400) | Read the violation (focus node / path / message), fix the node `type` or a required property, retry. |
@@ -108,4 +108,4 @@ Episode `name`: `ingest-<src-id>` for a pre-spec'd source, or `<topic>-<date>` f
 This skill depends only on `curl` + the Quipu HTTP contract. To point it at a different graph,
 change the endpoint. To run it from a non-Claude agent, the only Claude-specific piece is the skill
 wrapper — the workflow (read source → extract nodes/edges → POST) is plain instructions any capable
-LLM can follow. This is the graphify model: the capability travels with the prompt, not the platform.
+LLM can follow. The capability travels with the prompt, not with a platform.
