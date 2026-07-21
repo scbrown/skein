@@ -6,9 +6,13 @@ description: >
   do Y", "nudge an agent", or when you need one agent to pick up a task in
   another agent's session. Covers creating the item in any tracker, deciding
   whether the target agent's pane is ready to receive, sending via tmux, and
-  verifying the message actually landed. Drives the shantytown `st` CLI when it
-  is installed; falls back to a bundled stdlib engine over plain tmux when it
-  isn't. Portable: shell + tmux only, no framework or service.
+  verifying the message actually landed — plus the crew-coordination surfaces
+  around it: watching a worker by name (`st attach`), the supervisor heartbeat
+  that pushes a blocked worker to its coordinator (`st tend --loop`), and the
+  cycle discipline that treats a context-saturated agent as a wall, not a target.
+  Drives the shantytown `st` CLI when it is installed; falls back to a bundled
+  stdlib engine over plain tmux when it isn't. Portable: shell + tmux only, no
+  framework or service.
 ---
 
 # Dispatch Work
@@ -99,13 +103,16 @@ st go <item> <agent>         # triage, dispatch, record — in that order
 st go <item> <agent> -n      # --dry-run: shows the verdict, writes nothing
 ```
 
-Two refusals are the reason to prefer it, and both are refusals *by default*:
+Its refusals are the reason to prefer it, and each is a refusal *by default*:
 
 - **It will not type into a busy pane.** `st go` consults triage first and
   refuses rather than interrupt an agent mid-response.
 - **It will not silently steal an item another agent already holds.** Dispatching
   an already-assigned item refuses unless you pass `--reassign`. A standalone
   script has no idea an item is held; `st` does, because the tracker does.
+- **It will not dispatch to a *saturated* agent** — one past the cycle threshold,
+  which reads idle but degrades. See the cycle discipline under *Coordinating a
+  crew* below.
 
 Exit codes (`st`'s own, and they are **not** `dispatch.py`'s — see below):
 
@@ -144,6 +151,69 @@ Y" freezes Y at send time; if Y has since flipped, you have sent the worker to
 chase a premise that no longer holds. So dispatch "go read `<id>`, and read its
 latest state" and let the worker act on the source of truth, not on your snapshot
 of it. This is why the send is a pointer to the id, never a copy of its contents.
+
+## Coordinating a crew, not just one dispatch
+
+Dispatching one item is above. Running a *crew* — many workers, one coordinator —
+needs three more moves, and `st` ships each as a feature. Check any command here
+against your own `st --help` before you lean on it: a skill that documents a
+surface the binary does not have is the exact drift this whole pattern exists to
+avoid.
+
+**Watch a worker by name — `st attach`.** You should never have to know which
+multiplexer socket or session an agent lives on just to look at it:
+
+```bash
+st attach <agent>      # open that agent's pane — st resolves the socket + pane
+st attach              # no arg: open the COORDINATOR (the administrator), the
+                       # pane you most often want, which st knows from the registry
+st attach <agent> -r   # --read-only: observe; no keystroke can land in their work
+```
+
+Without `st` this is `tmux attach` to the right session on the right socket —
+which means knowing both, per agent. `st` removes exactly that toil by holding the
+mapping. Use `-r` to *watch* a working agent without the risk of a stray keystroke
+landing in its buffer.
+
+**Never lose a blocked worker — `st tend --loop`.** A one-coordinator tier only
+works if the coordinator is *told* about a stuck worker instead of polling for it.
+`st tend` is the supervisor; `--loop` makes it a heartbeat:
+
+```bash
+st tend -n                 # one dry-run pass: what it WOULD respawn, touching nothing
+st tend --loop 30          # a pass every 30s forever — a blocked or stalled worker is
+                           # PUSHED to its coordinator within one interval, on its own
+st tend --install          # the same, as a durable systemd --user timer (--interval N)
+st tend --status           # is the timer installed, and when did a pass last run?
+```
+
+The load-bearing word is *pushed*: the coordinator does not sweep the crew, the
+sweep comes to the coordinator. `dispatch.py` has no equivalent — it dispatches,
+it does not supervise — so on the fallback path this loop is yours to run. The
+rule survives the tooling either way: **the supervisor pushes; the coordinator
+does not poll.**
+
+**A stuffed agent is a wall, not a worker — the cycle discipline.** An agent deep
+in context reads as *idle* — quiet pane, empty prompt — and is the single least
+able to notice it should stop. `st crew` names this state `saturated` and refuses
+to count it as free:
+
+```bash
+st crew    # a saturated agent shows state `saturated`, and the summary warns:
+           #   ⚠ N agent(s) past the cycle threshold — NOT free, a dispatch wall
+```
+
+This is a **third** `st go` refusal, alongside busy-pane and item-stealing: `st
+go` will not dispatch to a `saturated` agent, because past the cycle threshold an
+agent degrades — it drops earlier context, re-derives settled decisions, and
+misses constraints stated long ago. The remedy is a sequence, and its order is
+load-bearing: the agent **checkpoints its state to its item, THEN clears (or hands
+off to a fresh session), THEN takes new work.** Never auto-clear a saturated
+agent — a bare clear discards whatever it had not yet written down. And because
+the saturated agent is the least able to notice, driving the cycle is the
+*coordinator's* job, not the worker's. On the fallback path this is the triage
+**CLEAR** decision one notch sharper: high context is a reason to cycle before
+sending, whether or not the new task is related.
 
 Everything below is the fallback path, and the traps in it apply to `st` too —
 it makes the same judgement on the same evidence.
