@@ -108,5 +108,54 @@ class TestOncePerSession(unittest.TestCase):
         # It may or may not fire (it de-dups by day), but it must exit 0 cleanly.
 
 
+class TestDpSignal(unittest.TestCase):
+    """The dp (desirepath) input is OPTIONAL and self-hiding: present -> a section
+    of pre-identified improvement candidates; absent/broken -> empty, never an
+    error. Imported directly since _dp_signal is a pure function of `dp`'s output."""
+
+    def setUp(self):
+        sys.path.insert(0, HERE)
+        import retro_hook
+        self.rh = retro_hook
+
+    def test_absent_dp_hides(self):
+        self.rh.shutil.which = lambda _: None
+        self.assertEqual(self.rh._dp_signal(), "")
+
+    def test_present_dp_lists_recurring_calls(self):
+        self.rh.shutil.which = lambda _: "/usr/bin/dp"
+
+        class P:
+            returncode = 0
+            stdout = json.dumps([
+                {"pattern": "SomeTool", "count": 9},
+                {"pattern": "Other", "count": 2},
+            ])
+
+        self.rh.subprocess.run = lambda *a, **k: P()
+        out = self.rh._dp_signal()
+        self.assertIn("SomeTool (reached for 9x)", out)
+        self.assertIn("Other (reached for 2x)", out)
+
+    def test_dp_error_hides(self):
+        self.rh.shutil.which = lambda _: "/usr/bin/dp"
+
+        class P:
+            returncode = 1
+            stdout = ""
+
+        self.rh.subprocess.run = lambda *a, **k: P()
+        self.assertEqual(self.rh._dp_signal(), "")
+
+    def test_dp_crash_hides(self):
+        self.rh.shutil.which = lambda _: "/usr/bin/dp"
+
+        def boom(*a, **k):
+            raise OSError("no dp")
+
+        self.rh.subprocess.run = boom
+        self.assertEqual(self.rh._dp_signal(), "")
+
+
 if __name__ == "__main__":
     unittest.main()

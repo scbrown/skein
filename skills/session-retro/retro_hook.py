@@ -33,6 +33,8 @@ Stdlib only. No dependencies. Config is env vars (see the SKILL / --help note).
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 import time
 import pathlib
@@ -54,6 +56,41 @@ def _interval_hours() -> float:
         return float(os.environ.get("RETRO_MIN_INTERVAL_HOURS", "0") or "0")
     except ValueError:
         return 0.0
+
+
+def _dp_signal() -> str:
+    """OPTIONAL: surface desirepath's recorded FAILED tool calls as pre-identified
+    improvement candidates. dp (github.com/scbrown/desire-path) records the
+    capabilities something reached for that did not exist — and a RECURRING failed
+    tool call IS an improvement issue ("X was reached for N times and does not
+    exist — add it, or an alias that routes to what does").
+
+    Self-hiding, like every other tool this skill reaches for: returns "" when dp
+    is absent, errors, times out, or has nothing — a machine without dp gets the
+    plain retro, never an error. Reads dp's published JSON, not its SQLite."""
+    if not shutil.which("dp"):
+        return ""
+    try:
+        r = subprocess.run(["dp", "paths", "--top", "5", "--json"],
+                           capture_output=True, text=True, timeout=10)
+        if r.returncode != 0:
+            return ""
+        paths = json.loads(r.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return ""
+    if not isinstance(paths, list):
+        return ""
+    rows = [f"   - {p['pattern']} (reached for {p['count']}x)"
+            for p in paths
+            if isinstance(p, dict) and p.get("pattern") and p.get("count")]
+    if not rows:
+        return ""
+    return (
+        "\n\n3. desirepath (dp) recorded these FAILED tool calls — capabilities "
+        "something reached for that did not exist. Each RECURRING one is its own "
+        "improvement issue; file the real gaps, skip one-off typos:\n"
+        + "\n".join(rows)
+    )
 
 
 def _prompt() -> str:
@@ -87,7 +124,8 @@ def _prompt() -> str:
         "   What slowed me down: <the concrete friction you hit this session>\n"
         "   Proposed fix: <the smallest change that removes it>\n"
         "   Where: <which repo / system / doc it belongs to>\n\n"
-        "If nothing genuinely rose to the bar, say so in one line and file "
+        + _dp_signal()
+        + "\n\nIf nothing genuinely rose to the bar, say so in one line and file "
         "nothing — an empty retro beats a padded one. Then stop."
     )
 
