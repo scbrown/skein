@@ -136,7 +136,7 @@ Different roles patrol different domains. Read the reference matching yours:
   Chat bridges, message routing, event delivery
 - **Tooling**: `references/tooling-patrol.md`
   Git hygiene, CI status, CLI tools, MCP health
-- **Search / context**: `references/bobbin-patrol.md`
+- **Search / context**: `references/internal-ref.md`
   Index health, injection quality, feedback scores
 
 If you don't own a specific domain, run the full checklist above.
