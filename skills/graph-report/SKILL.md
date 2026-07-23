@@ -18,6 +18,19 @@ Graph-building tools hand you a `GRAPH_REPORT.md` (god nodes, surprises, suggest
 at build time — and it is stale the next day. This skill produces the same orientation **live** from
 Quipu, over HTTP: no static file, no framework. It pairs with [graph-extract] (which fills the graph).
 
+**Stack tools this reaches for**
+
+| Present | This skill uses it for | Absent — what happens |
+|---|---|---|
+| **[Quipu](https://github.com/scbrown/quipu)** at `${GRAPH_URL}` | **required.** `/stats`, `/project` (PageRank), `/query` | there is no report. Nothing here can be approximated |
+| **[quipu](../quipu/SKILL.md)** skill | the follow-up queries this report is designed to hand you | the report is a dead end instead of a starting point |
+| **[graph-extract](../graph-extract/SKILL.md)** | filling a graph thin enough that PageRank is noise | report what's there and say it's small |
+
+**This skill requires a running Quipu endpoint** with the graph algorithm
+endpoint (`/project`) available. If `/project` is missing, report size from
+`/stats` alone and **name the sections you could not compute** — an orientation
+report with silently-omitted sections is worse than a short one.
+
 **Graph endpoint:** `${GRAPH_URL}` (group `${GRAPH_GROUP}`). See
 `{baseDir}/references/endpoints.md` for the exact request shapes and the schema-node filter list.
 

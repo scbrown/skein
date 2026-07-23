@@ -13,11 +13,7 @@ hooks:
     - matcher: "Write|Edit"
       hooks:
         - type: command
-          command: "echo '[planning-with-files] File updated. If this completes a phase, update task_plan.md status.'"
-  Stop:
-    - hooks:
-        - type: command
-          command: "SD=\"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/planning-with-files}/scripts\"; powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$SD/check-complete.ps1\" 2>/dev/null || sh \"$SD/check-complete.sh\""
+          command: "echo '[planning-with-files] File updated. If this completes a phase, update task_plan.md status.' || true"
 metadata:
   version: "2.21.0"
 ---
@@ -26,35 +22,49 @@ metadata:
 
 Work like Manus: Use persistent markdown files as your "working memory on disk."
 
-## FIRST: Check for Previous Session (v2.2.0)
+**Stack tools this reaches for**
 
-**Before starting work**, check for unsynced context from a previous session:
+| Present | This skill uses it for | Absent — what happens |
+|---|---|---|
+| *(none required)* | the file discipline is plain markdown and works anywhere | — |
+| **[bobbin](https://github.com/scbrown/bobbin)** | `bobbin context "<the goal>"` to populate `findings.md` at the start of a phase, instead of grepping | you rediscover the same files each session |
+| **[hank](https://github.com/scbrown/hank)** | `hank impact <symbol>` when a phase touches code — the blast radius belongs in `findings.md` | plan a change without knowing what it reaches |
+| **[dispatch-work](../dispatch-work/SKILL.md)** | handing a phase to another agent once the plan names discrete phases | do every phase yourself |
+
+This is the one skill here with **no service dependency at all** — it is three
+markdown files and the discipline to update them. Everything above is an
+accelerant, not a requirement.
+
+## FIRST: Check for a Previous Session
+
+**Before starting work**, recover state from the last session. This is plain git
+and plain reads — there is no script to install:
 
 ```bash
-# Linux/macOS
-$(command -v python3 || command -v python) ${CLAUDE_PLUGIN_ROOT}/scripts/session-catchup.py "$(pwd)"
+ls task_plan.md findings.md progress.md 2>/dev/null   # is there a previous session?
+git diff --stat                                        # what actually changed on disk
+git log --oneline -10                                  # what was committed
 ```
 
-```powershell
-# Windows PowerShell
-& (Get-Command python -ErrorAction SilentlyContinue).Source "$env:USERPROFILE\.claude\skills\planning-with-files\scripts\session-catchup.py" (Get-Location)
-```
+If the planning files exist but `git diff` shows work they don't mention, the
+files are stale — **reconcile before continuing**:
 
-If catchup report shows unsynced context:
+1. Read all three planning files
+2. Compare against `git diff --stat` and `git log`
+3. Update the files to match reality (mark completed phases, log what happened)
+4. Then proceed with the task
 
-1. Run `git diff --stat` to see actual code changes
-2. Read current planning files
-3. Update planning files based on catchup + git diff
-4. Then proceed with task
+Reconcile in that order. A plan that disagrees with the working tree is worse
+than no plan, because it is confidently wrong about where you are.
 
 ## Important: Where Files Go
 
-- **Templates** are in `${CLAUDE_PLUGIN_ROOT}/templates/`
+- **Templates** are in this skill's `templates/` directory
 - **Your planning files** go in **your project directory**
 
 | Location | What Goes There |
 |----------|-----------------|
-| Skill directory (`${CLAUDE_PLUGIN_ROOT}/`) | Templates, scripts, reference docs |
+| Skill directory | Templates (`templates/`) |
 | Your project directory | `task_plan.md`, `findings.md`, `progress.md` |
 
 ## Quick Start
@@ -202,18 +212,19 @@ Copy these templates to start:
 - [templates/findings.md](templates/findings.md) — Research storage
 - [templates/progress.md](templates/progress.md) — Session logging
 
-## Scripts
+Those three files are the whole skill. There are no helper scripts to install and
+nothing to keep up to date.
 
-Helper scripts for automation:
-
-- `scripts/init-session.sh` — Initialize all planning files
-- `scripts/check-complete.sh` — Verify all phases complete
-- `scripts/session-catchup.py` — Recover context from previous session (v2.2.0)
-
-## Advanced Topics
-
-- **Manus Principles:** See [reference.md](reference.md)
-- **Real Examples:** See [examples.md](examples.md)
+> **A note on the hooks in this file's frontmatter.** They are optional and
+> Claude-Code-specific; the file discipline works with any agent and no hooks at
+> all. Earlier versions of this skill registered a `Stop` hook pointing at
+> `scripts/check-complete.sh` — a script this repo does not ship — with no
+> `|| true` guard, so on every stop it invoked a missing file. That hook has been
+> removed rather than stubbed. **A hook that references a script you do not ship
+> is not a feature, it is an error message on a schedule**, and a skill claiming
+> automation it cannot perform is the failure this repo is written against. If
+> you add hooks back, guard every one with `|| true`: a hook that *can* fail a
+> session will eventually fail one.
 
 ## Security Boundary
 

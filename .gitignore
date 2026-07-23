@@ -1,3 +1,8 @@
 # Python
 __pycache__/
 *.pyc
+
+# Local git bundles / archives — never publish these to a public repo.
+# A full-history bundle carries every branch, including ones that were never
+# meant to be public.
+*.bundle
