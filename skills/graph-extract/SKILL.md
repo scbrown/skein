@@ -42,6 +42,11 @@ your first POST.
 **Graph endpoint:** `${GRAPH_URL}/episode` (group `${GRAPH_GROUP}`). Set it to a **hostname**,
 never a raw private IP — IPs move, and a hardcoded one turns a portable skill into yours only.
 
+**Write auth (if the graph requires it):** some deployments gate **writes** behind a bearer token
+while **reads stay open**. If yours does, set `GRAPH_TOKEN` to the write token — the `POST` below
+sends it only when set, so it stays a no-op on an open graph. A bare-curl write against an
+auth-enabled graph silently `401`s (see Failure Modes).
+
 ## Essential Principles
 
 1. **One fact per edge, no speculation.** Every edge is `{source, target, relation}` — all three
@@ -89,6 +94,7 @@ See `{baseDir}/references/episode-schema.md` for the exact JSON shape. Skeleton:
 ```bash
 curl -s -m 20 -w '\nHTTP %{http_code}\n' ${GRAPH_URL}/episode -X POST \
   -H 'Content-Type: application/json' \
+  ${GRAPH_TOKEN:+-H "Authorization: Bearer $GRAPH_TOKEN"} \
   -d '{
     "name": "<episode-name>",
     "episode_body": "<short factual paragraph of the source>",
@@ -111,6 +117,7 @@ Episode `name`: `ingest-<src-id>` for a pre-spec'd source, or `<topic>-<date>` f
 | Situation | Action |
 |-----------|--------|
 | `${GRAPH_URL}` unreachable / non-200 / `count: 0` | Do NOT mark the source ingested. Save the assembled `nodes`/`edges` (note: `KNOWLEDGE-PENDING-INGESTION`) so a retry re-runs cleanly. |
+| **`401 Unauthorized`** on the `POST` | The graph gates writes behind a bearer (reads stay open) and none/an invalid one was sent — auth, NOT an outage. Set `GRAPH_TOKEN` to the write token and retry. A `401` on write while `/query` reads still `200` is the tell: it is auth, not a wedge. |
 | < 2 nodes or < 1 edge extractable | Skip — nothing knowledge-worthy. Say so explicitly. |
 | Referenced source missing | Ingest what's available; don't fail the whole run. |
 | SHACL validation rejects the write (400) | Read the violation (focus node / path / message), fix the node `type` or a required property, retry. |
