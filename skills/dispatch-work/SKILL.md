@@ -35,6 +35,7 @@ the message *landed*.
 | **[shantytown](https://github.com/scbrown/shantytown)** (`st`) | **the first-class path.** Dispatch, crew state, identity, durable messages | falls back to the bundled `dispatch.py` — same triage idea, less of it |
 | `tmux` | the send itself, either way | nothing works. This is the one hard requirement |
 | **[bobbin](https://github.com/scbrown/bobbin)** | `st context <query>` — attach the right files to the item before you send it | dispatch a bare title; the receiving agent starts by searching |
+| **[hank](https://github.com/scbrown/hank)** | `hank impact <symbol>` / `hank callers <symbol>` — attach the BLAST RADIUS to a structural item before you send it, so the receiving agent starts knowing what the change touches | dispatch names the file; the receiving agent discovers the fallout mid-edit |
 | a tracker (`bd`, `gh`, files) | somewhere for the id to live | `--backend file` writes to a directory |
 
 **Reach for `st` first.** If `st --help` answers, use it: it does everything
@@ -152,6 +153,7 @@ chase a premise that no longer holds. So dispatch "go read `<id>`, and read its
 latest state" and let the worker act on the source of truth, not on your snapshot
 of it. This is why the send is a pointer to the id, never a copy of its contents.
 
+<<<<<<< Updated upstream
 ## Coordinating a crew, not just one dispatch
 
 Dispatching one item is above. Running a *crew* — many workers, one coordinator —
@@ -214,6 +216,36 @@ the saturated agent is the least able to notice, driving the cycle is the
 *coordinator's* job, not the worker's. On the fallback path this is the triage
 **CLEAR** decision one notch sharper: high context is a reason to cycle before
 sending, whether or not the new task is related.
+=======
+## Structural changes: ask hank BEFORE you dispatch (and before you edit)
+
+A structural change — renaming a symbol, changing a signature, moving a module,
+touching anything other code calls — has a **blast radius**, and the cheapest
+moment to learn it is *before* the work starts, not when the tests break.
+[hank](https://github.com/scbrown/hank) answers it in milliseconds from a live
+code graph:
+
+```bash
+hank impact <symbol>      # everything transitively affected by changing it
+hank callers <symbol>     # who calls it directly, and what it calls
+hank dataflow <function>  # what flows where inside it
+hank verify --file <f> --buffer <proposed>   # would this edit even resolve?
+```
+
+The dispatcher's half: run `hank impact` on the symbols the item touches and put
+the radius **in the dispatch note** — "this touches 3 files / 14 symbols, the
+callers are X and Y" is the difference between a worker who plans and one who
+discovers. The worker's half: run it again before the first edit, because the
+graph may have moved since the dispatch.
+
+The passive half is already wired where shantytown launches the crew: every
+agent's `PreToolUse` hook runs `hank hook pre-edit`, which sizes the edit
+against per-tenant ceilings AND evaluates it against **governed policies
+projected from a Quipu knowledge graph** (rules live in the graph as data;
+hank enforces them at change time; verdicts carry the rule's own rationale).
+The active habit above is what the hook cannot do for you: it fires when you
+edit — `hank impact` is for *before you decide what to edit*.
+>>>>>>> Stashed changes
 
 Everything below is the fallback path, and the traps in it apply to `st` too —
 it makes the same judgement on the same evidence.
