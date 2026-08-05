@@ -1,0 +1,59 @@
+name: CI
+
+# skein had no CI at all — zero workflows, zero runs — while carrying 51 passing
+# tests across four skills that nothing had ever executed. This runs them.
+#
+# The tests are DISCOVERED, not enumerated. A hardcoded list of test files stops
+# covering a skill the day somebody adds one, and it does so silently: the run
+# stays green because the new tests were never collected. Discovery plus the
+# floor below is what makes that failure visible instead of invisible.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+
+      - name: Run skill tests
+        run: |
+          set -o pipefail
+          python -m pytest skills -q --junitxml=/tmp/r.xml | tee /tmp/pytest.log
+
+      - name: Assert the suite actually ran
+        # THE POINT OF THIS STEP. `pytest` exits 5 when it collects NOTHING, and a
+        # tree reorganisation, a bad path, or a rename can produce exactly that —
+        # a run that executed zero tests. Without a floor, "collected nothing" and
+        # "everything passed" are the same green badge, which is the failure this
+        # repo's own skills spend their time warning about.
+        #
+        # The floor is deliberately a floor, not the exact count: it must not need
+        # editing every time a test is added, only when tests are REMOVED wholesale.
+        run: |
+          set -euo pipefail
+          COUNT=$(python - <<'PY'
+          import xml.etree.ElementTree as ET
+          r = ET.parse('/tmp/r.xml').getroot()
+          s = r if r.tag == 'testsuite' else r.find('testsuite')
+          print(int(s.get('tests', 0)))
+          PY
+          )
+          echo "tests executed: ${COUNT}"
+          if [ "${COUNT}" -lt 40 ]; then
+            echo "::error::only ${COUNT} tests ran (floor is 40). Either tests were"
+            echo "::error::deleted, or collection silently stopped finding them."
+            exit 1
+          fi
