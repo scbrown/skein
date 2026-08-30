@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "contract": "graph-extract-portable-safety",
+  "invariants": [
+    {
+      "id": "outcome-is-write-verdict",
+      "requirement": "Treat created, updated, and unchanged as successful episode outcomes; count is transaction write volume, not a presence or success gate."
+    },
+    {
+      "id": "reader-path-readback",
+      "requirement": "After a successful outcome, verify nodes through the type-aware query path a reader will use before marking the source ingested."
+    },
+    {
+      "id": "indeterminate-transport",
+      "requirement": "Treat timeout, empty response, and gateway errors as indeterminate commit results; verify before any byte-identical retry."
+    },
+    {
+      "id": "stable-node-identity",
+      "requirement": "Search before minting and reuse existing node names exactly; a retry must preserve the exact episode body."
+    },
+    {
+      "id": "corrections-use-set",
+      "requirement": "Correct one predicate with /set instead of re-posting an episode, because episode merge semantics can append duplicate comments."
+    },
+    {
+      "id": "standard-predicates-use-knot",
+      "requirement": "Write RDF, RDFS, SKOS, and OWL predicates through /knot or /set; /episode relations are Aegis-local predicates."
+    },
+    {
+      "id": "every-node-is-typed",
+      "requirement": "Every episode node has a governed type; one untyped node invalidates the whole episode."
+    }
+  ]
+}
+

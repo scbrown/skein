@@ -18,6 +18,11 @@ allowed-tools:
 
 # graph-extract — source material → Quipu knowledge graph
 
+The portable safety invariants are canonicalized in
+`references/portable-safety-contract.json`. That contract is shared byte-for-byte with the
+executing Aegis skill and checked on the fleet's scheduled skill-selfheal path; update both copies
+together. Environment-specific scripts and operating detail may differ, but these invariants may not.
+
 This skill is the portable, LLM-agnostic way to get knowledge into a graph. **You** (the agent) do
 the extraction — the cheap, mechanical part — and POST a structured episode to Quipu's HTTP API. No
 pipeline, no worker pool, no job runner. It runs anywhere there's a shell and network access to the
@@ -57,10 +62,23 @@ auth-enabled graph silently `401`s (see Failure Modes).
    search service". Reuse names already in the graph so facts attach to existing entities instead
    of forking duplicates — query first (`/query`) when unsure, or use Quipu's resolve step.
 
-3. **The store is the source of truth — verify the write took.** A successful POST returns HTTP
-   200 with `count > 0` (triples written) and a `tx_id`. Treat `count: 0` or any non-200 as a
-   FAILURE (see Failure Modes). Do not trust the optional SPARQL regex self-check — `regex(str(?l))`
-   FILTERs are unreliable on this Quipu; key success on `count` + `tx_id`.
+3. **Branch on `outcome`, NEVER on `count`.** A successful POST returns HTTP 200 and an
+   `outcome` of `created`, `updated` **or `unchanged`** — all three are success.
+
+   > ⛔ **`count` CANNOT answer "did this land".** It is the number of triples written by THIS
+   > transaction, not facts present. The endpoint is idempotent on a content hash, so a
+   > byte-identical re-post writes nothing and returns `outcome: unchanged, tx_id: 0, count: 0` —
+   > the SAME response shape as a write that achieved nothing. `tx_id: 0` is a sentinel meaning
+   > no transaction was opened; it is not a transaction id.
+   >
+   > This skill previously said to treat `count: 0` as a FAILURE, and that is a **pipeline from a
+   > reporting bug into a corruption bug**: a correct idempotent re-post reads as failed, so the
+   > source is not marked ingested, so the next pass ingests it again — and a second episode about
+   > the same subject by a different author is not byte-identical, which either forks the entity
+   > under a re-worded name or appends a duplicate `rdfs:comment`. Both ends are silent.
+
+   Do not trust the optional SPARQL regex self-check — `regex(str(?l))` FILTERs are unreliable
+   here. Verify with the control-gated read-back in step 4 instead.
 
 4. **Minimum viable episode: ≥2 nodes and ≥1 edge.** If you can't extract that much that's real,
    skip — don't pad the graph with trivia.
@@ -107,16 +125,38 @@ curl -s -m 20 -w '\nHTTP %{http_code}\n' ${GRAPH_URL}/episode -X POST \
 
 Episode `name`: `ingest-<src-id>` for a pre-spec'd source, or `<topic>-<date>` for raw material.
 
-### 4. Confirm and (optionally) annotate the source
-- On HTTP 200 + `count > 0` + `tx_id`: done. If you read from a tracker issue, label the source
-  `ontology-ingested` so it isn't re-processed.
-- The episode is now queryable: `POST /query` (SPARQL) or `/search_nodes`.
+### 4. Confirm with a CONTROL, then annotate the source
+
+A landed write is not a findable one, and the obvious check lies in the reassuring direction —
+during load, a read for your own node can return nothing for a write that fully succeeded. So
+prove the instrument works BEFORE believing an absence:
+
+```bash
+# 1. CONTROL — this MUST return rows before any absence means anything
+curl -s "${GRAPH_URL}/query" -X POST -H 'Content-Type: application/json' \
+  -d '{"query":"SELECT ?s WHERE { ?s a <'"${GRAPH_NS}"'Directive> } LIMIT 3"}'
+# 2. ONLY THEN look for your own node. A zero before step 1 passes proves NOTHING.
+```
+
+- Ask for the node **the way a reader would ask** — by the `type` they would filter on. A node
+  that is present but not retrievable on that path is ingested and invisible.
+- Label the source `ontology-ingested` on an OBSERVED 200 whose `outcome` is `created`,
+  `updated` or `unchanged` — never on `count`, and never on "it was dispatched".
+
+> ⚠️ **A timeout, an empty body, or an explicit `502` is NOT a failed write.** The response can be
+> lost at or after commit, so all of those — and a read-back showing nothing — are consistent with
+> a write that succeeded. Do not retry on sight: run the control, read twice with a gap, and if you
+> do retry, **re-send the SAME BODY byte-for-byte.** The impulse to improve the wording on a retry
+> is exactly how a correctly-followed retry rule produces the duplicate it exists to prevent.
 
 ## Failure Modes
 
 | Situation | Action |
 |-----------|--------|
-| `${GRAPH_URL}` unreachable / non-200 / `count: 0` | Do NOT mark the source ingested. Save the assembled `nodes`/`edges` (note: `KNOWLEDGE-PENDING-INGESTION`) so a retry re-runs cleanly. |
+| `${GRAPH_URL}` unreachable, or a non-200 that is **not** a timeout/502 | Do NOT mark the source ingested. Save the assembled `nodes`/`edges` (note: `KNOWLEDGE-PENDING-INGESTION`) so a retry re-runs cleanly. |
+| `count: 0` / `tx_id: 0` with `outcome: unchanged` | **SUCCESS — mark it ingested.** The content was already there, byte-identical. Nothing was written because nothing needed to be. |
+| Timeout, empty body, or `502` | **INDETERMINATE, not failed.** Run the control query, then read twice with a gap. Retry ONCE and only with the identical body; then verify `rdfs:comment` count is 1, not merely that the node is present. |
+| Same node needs a corrected description | Do **not** re-post the episode — that appends a second `rdfs:comment` every time. Replace the one predicate instead (`/set`), then verify the count is 1. |
 | **`401 Unauthorized`** on the `POST` | The graph gates writes behind a bearer (reads stay open) and none/an invalid one was sent — auth, NOT an outage. Set `GRAPH_TOKEN` to the write token and retry. A `401` on write while `/query` reads still `200` is the tell: it is auth, not a wedge. |
 | < 2 nodes or < 1 edge extractable | Skip — nothing knowledge-worthy. Say so explicitly. |
 | Referenced source missing | Ingest what's available; don't fail the whole run. |
