@@ -18,6 +18,11 @@ allowed-tools:
 
 # graph-extract — source material → Quipu knowledge graph
 
+The portable safety invariants are canonicalized in
+`references/portable-safety-contract.json`. That contract is shared byte-for-byte with the
+executing Aegis skill and checked on the fleet's scheduled skill-selfheal path; update both copies
+together. Environment-specific scripts and operating detail may differ, but these invariants may not.
+
 This skill is the portable, LLM-agnostic way to get knowledge into a graph. **You** (the agent) do
 the extraction — the cheap, mechanical part — and POST a structured episode to Quipu's HTTP API. No
 pipeline, no worker pool, no job runner. It runs anywhere there's a shell and network access to the
