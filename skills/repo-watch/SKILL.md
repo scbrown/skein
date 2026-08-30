@@ -1,9 +1,9 @@
 ---
 name: repo-watch
 description: >-
-  Run a watch pass over one repository — read its plans, its open beads, its docs and its
-  code delta through four ordered lenses, and mint a bead for every gap between what the
-  repo promises and what it ships. Read-only against the repository: a watch pass never
+  Run a watch pass over one repository — read its plans, its open beads, its docs, its
+  code delta and its open forge issues/PRs through five ordered lenses, and mint a bead
+  for every gap between what the repo promises and what it ships. Read-only against the repository: a watch pass never
   edits, pushes, merges, deploys, or touches an issue or pull request. Owner, remotes and
   norms are resolved from the knowledge graph at run time, never hardcoded. Triggers on
   "watch <repo>", "repo watch", "dream pass", "what has drifted in <repo>", "review this
@@ -17,7 +17,7 @@ allowed-tools:
 
 # repo-watch — what does this repo promise that it does not ship?
 
-A watch pass reads one repository through four lenses, in order, and produces **one watch
+A watch pass reads one repository through five lenses, in order, and produces **one watch
 report plus a bead for every gap it can evidence**. It changes nothing.
 
 The unit of output is a gap: *X promises, Y delivers.* Not an opinion, not a wish, not a
@@ -94,7 +94,7 @@ result: the repo is genuinely unowned, or its owner is recorded only as prose in
 map. A pass that guesses an owner mints work at the wrong person and looks authoritative
 doing it.
 
-## Step 2 — the four lenses, in this order
+## Step 2 — the five lenses, in this order
 
 The order is the contract. Plans establish intent; beads say what is already claimed; docs
 state what was promised; code says what is true. Reading them in this order means every
@@ -141,11 +141,61 @@ this is `None` — a first pass has no delta, and manufacturing one restates the
 repository as new findings. Record the anchor, report the current state from the other
 three lenses, and say plainly that it was a bootstrap.
 
+### Lens 5 — the forge sweep (issues and pull requests)
+
+Every OPEN issue and pull request with no tracking bead gets one. Use the forge's own
+CLI or API — `gh` for public repos, the Forgejo API at `${FORGE_URL}` for internal ones.
+`repo_watch.sweep_candidates(items, repo)` turns either forge's JSON into candidate gap
+titles; it reads `number`, `title` and `state`, which is the only ground the two shapes
+share.
+
+**This extends the CI watcher, it does not duplicate it.** A CI watcher reports *run
+state transitions* per workflow — passing→failing, once. This lens reports *open objects
+with no bead*. Different objects, different lifetimes; if you find yourself reporting a
+red run here, you are in the wrong lens.
+
+Two details that are easy to get wrong and silent when you do:
+
+- **A PR is detected by the PRESENCE of a pull-request marker, not its truthiness.**
+  `gh` emits `pull_request` as an object that is sometimes `{}`, and `{}` is falsy — a
+  truthiness test relabels *some* real PRs as issues, so a sample looks correct.
+- **A non-open item is not a gap.** Anything not `open` returns None rather than being
+  swept up and deduplicated later.
+
 ## Step 3 — dedupe against the corpus, THEN cap
 
 ```python
-mint, dupes, held = repo_watch.partition_mints(candidates, corpus, cap=7)
+r = repo_watch.triage(candidates, corpus, cap=7)
+#  r.mint       -> create these, labelled repo_watch.mint_labels(repo)
+#  r.update     -> an OPEN watch bead already covers this; UPDATE it, do not re-mint
+#  r.duplicate  -> an existing bead covers it; do nothing
+#  r.held       -> over the cap. Report them: r.withheld_line(7)
 ```
+
+> ⛔ **NEVER BUILD `corpus` FROM A TITLE SEARCH.** The store's search matches TITLES ONLY
+> and reports that blindness in the exact words of a true absence. Every directive and
+> finding on this fleet is prose in a DESCRIPTION or a COMMENT — so a title-only dedupe is
+> structurally blind to precisely what it is checking for, and it would report "no
+> duplicates" most confidently for the subjects that have been discussed most.
+>
+> **This is the single most likely way this lens ships broken while appearing to work.**
+> Export the full JSONL corpus and pass that.
+
+**A re-found gap UPDATES its existing watch bead.** Minting a second bead for a gap that
+is already open is how a watcher turns a board into noise across passes rather than within
+one. Two guards on that, both deliberate: a **closed** watch bead is a duplicate, not an
+update — the gap was dealt with, and a genuine regression deserves a new bead with a new
+argument; and a bead a **human** wrote is never updated by the watcher, because a watcher
+editing someone else's bead is how its reports stop being trustworthy.
+
+**The cap must SAY what it withheld** — `r.withheld_line(cap)` names the subjects, not just
+a count. A count alone cannot be checked against the next pass, and a cap that silently
+drops findings is a filter nobody can audit.
+
+**Prove the dedupe FIRES.** `triage(..., dedupe=False)` exists only as the positive control:
+a dedupe that has never been observed minting the duplicate when disabled is
+indistinguishable from one that silently never matches anything. Never run a real pass with
+it off.
 
 **Dedupe runs before the cap, and the order is load-bearing.** Reversed, duplicates consume
 the budget and push real findings into the held pile — the pass then reports that it hit the

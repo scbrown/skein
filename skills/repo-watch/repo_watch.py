@@ -19,14 +19,20 @@ Design notes that are load-bearing, not decoration:
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 
 #: Ordered, and the order is the point. Plans establish intent; beads say what is
-#: already claimed; docs state what was promised; code says what is true. Reading
-#: them in this order means every later lens can cite an earlier one, and a gap is
-#: always phrased as "X promises, Y delivers" rather than a bare complaint.
-LENSES = ("plans", "beads", "docs", "code")
+#: already claimed; docs state what was promised; code says what is true; the sweep
+#: says what the forge is holding that none of them mention. Reading them in this
+#: order means every later lens can cite an earlier one, and a gap is always phrased
+#: as "X promises, Y delivers" rather than a bare complaint.
+#:
+#: The sweep is LAST deliberately: it is the only lens whose findings come from
+#: outside the repository, so running it after the other four means an open issue
+#: that the code or docs already answer is recognised as such rather than minted.
+LENSES = ("plans", "beads", "docs", "code", "sweep")
 
 #: A pass may not mint more than this without an explicit override. A watcher that
 #: floods the board is worse than one that misses something: the misses stay
@@ -211,8 +217,50 @@ def similarity(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
+#: A forge object reference: the repo name and the issue/PR number. `#99`, `PR 99`,
+#: `pull request 99` and `issue #99` all denote the same object, and a bead written
+#: by a human will use whichever reads best in its sentence.
+_FORGE_NUM = re.compile(r"(?:#|\b(?:pr|issue|pull\s+request)\s+#?)(\d{1,6})\b", re.I)
+
+
+def forge_refs(text: str) -> set[str]:
+    """Every issue/PR number mentioned in a piece of text, as strings.
+
+    Deliberately number-only and repo-agnostic: the repo is checked separately, and
+    forcing both into one pattern means a bead that names the repo in its title and
+    the number in its description matches neither half.
+    """
+    return {m.group(1) for m in _FORGE_NUM.finditer(text or "")}
+
+
+def refers_to_forge_object(bead: dict, repo: str, number: str) -> bool:
+    """Does this bead TRACK that forge object — not merely mention it?
+
+    Title and description only. **Comments are deliberately excluded**, and that
+    exclusion is the whole rule: a bead states its SUBJECT in its title and
+    description, while its comments discuss whatever came up. Including comments
+    made a bead about branch-protection policy — which mentioned a PR in passing
+    while discussing trigger behaviour — dedupe a genuine sweep candidate away.
+
+    Measured on real data: a sweep candidate for PR #99 matched a branch-protection
+    policy bead that named the PR only in a comment, instead of the bead whose title
+    was literally "Track <repo> PR #99". Both "refer to" the object; only one tracks
+    it. Deduping against a mention SUPPRESSES REAL WORK, which is the expensive
+    direction — a duplicate is visible and cheap to close, a suppressed finding is
+    neither.
+
+    Description is still included, because a tracking bead written by a human
+    routinely names the repo in the title and the number in the body.
+    """
+    blob = "\n".join([str(bead.get("title") or ""), str(bead.get("description") or "")])
+    if repo.lower() not in blob.lower():
+        return False
+    return number in forge_refs(blob)
+
+
 def find_duplicate(
-    candidate: str, corpus: list[dict], threshold: float = 0.6
+    candidate: str, corpus: list[dict], threshold: float = 0.6,
+    repo: str | None = None
 ) -> dict | None:
     """The existing bead a candidate gap would duplicate, or None.
 
@@ -226,6 +274,34 @@ def find_duplicate(
     not be re-minted this week — if it has regressed, that is a different bead with a
     different argument, and it deserves to be written as one.
     """
+    # STRONGEST SIGNAL FIRST: an exact forge-object reference.
+    #
+    # Fuzzy title overlap CANNOT do this job and quietly fails at it. Measured on
+    # real data: candidate "<repo> PR #99 untracked: chore: release v1.2.3" against
+    # the bead already tracking it, "Track <repo> PR #99: release v1.2.3",
+    # scores **0.333** — nowhere near any usable threshold — because the two are
+    # written by different authors for different readers and share almost no
+    # vocabulary. The one thing they DO share, the number, is exactly what the
+    # tokenizer drops (`#99` -> `99`, two characters, below the length floor).
+    #
+    # So the identity of a forge object is (repo, number), not its prose. Lowering
+    # the fuzzy threshold instead would have been the tempting fix and the wrong
+    # one: it buys this case at the cost of collapsing unrelated findings together,
+    # which suppresses real work rather than merely duplicating it.
+    if repo:
+        for number in sorted(forge_refs(candidate)):
+            # TITLE first: a bead that TRACKS an object names it in the title, while
+            # one that merely works on the same area may name it in the description.
+            # Without this ordering the winner is whichever bead the corpus happens
+            # to list first, and the report then attributes the dedupe to a bead that
+            # has little to do with the finding — right outcome, misleading record.
+            for titled in (True, False):
+                for bead in corpus:
+                    if titled and number not in forge_refs(str(bead.get("title") or "")):
+                        continue
+                    if refers_to_forge_object(bead, repo, number):
+                        return bead
+
     best, best_score = None, threshold
     for bead in corpus:
         title = bead.get("title") or ""
@@ -237,28 +313,153 @@ def find_duplicate(
     return best
 
 
-def partition_mints(
-    candidates: list[str], corpus: list[dict], cap: int = DEFAULT_MINT_CAP
-) -> tuple[list[str], list[tuple[str, dict]], list[str]]:
-    """Split candidate gaps into (mint, duplicate, deferred-by-cap).
+#: Labels every minted watch bead carries, plus the repo label added at run time.
+WATCH_LABELS = ("repo-watch", "needs-triage")
 
-    Dedupe runs BEFORE the cap. Doing it the other way round lets duplicates consume
-    the budget and pushes real findings into the deferred pile — the pass would then
-    report "hit the cap" while minting nothing new, which is the worst of both.
 
-    Nothing is discarded. Everything over the cap comes back as its own list so the
-    watch report can name what was held, rather than quietly dropping it.
+@dataclass
+class Triage:
+    """What a pass decided to do about each candidate gap.
+
+    Four outcomes, and the report names all four. A candidate that vanishes without
+    appearing in one of these lists is indistinguishable from one that was never
+    found, which is the failure this whole structure exists to prevent.
+    """
+
+    mint: list[str] = field(default_factory=list)
+    #: (candidate, the OPEN watch bead it should update instead of duplicating)
+    update: list[tuple[str, dict]] = field(default_factory=list)
+    #: (candidate, the existing bead that makes it a duplicate)
+    duplicate: list[tuple[str, dict]] = field(default_factory=list)
+    #: over the cap — withheld, never discarded
+    held: list[str] = field(default_factory=list)
+
+    def withheld_line(self, cap: int) -> str:
+        """One log line naming what the cap withheld, or that it withheld nothing.
+
+        Required, not optional. A cap that silently drops findings is a filter
+        nobody can audit; the pass must say the number AND the subjects, because
+        "held 3" with no titles cannot be checked against the next pass.
+        """
+        if not self.held:
+            return f"cap {cap}: nothing withheld ({len(self.mint)} minted)"
+        subjects = "; ".join(self.held)
+        return (f"cap {cap}: WITHHELD {len(self.held)} of "
+                f"{len(self.mint) + len(self.held)} eligible — {subjects}")
+
+
+def is_open_watch_bead(bead: dict) -> bool:
+    """An OPEN bead this watcher minted — the thing to UPDATE rather than re-mint.
+
+    Both halves matter. A CLOSED watch bead must not be reopened by a re-find: the
+    gap was dealt with, and if it has genuinely regressed that deserves a new bead
+    with a new argument. A bead a HUMAN wrote about the same subject must not be
+    updated either — a watcher editing someone else's bead is how a report stops
+    being trustworthy.
+    """
+    if (bead.get("status") or "").lower() == "closed":
+        return False
+    labels = bead.get("labels") or []
+    if isinstance(labels, str):
+        labels = [labels]
+    return "repo-watch" in {str(x).lower() for x in labels}
+
+
+def triage(candidates: list[str], corpus: list[dict],
+           cap: int = DEFAULT_MINT_CAP, dedupe: bool = True,
+           repo: str | None = None) -> Triage:
+    """Decide mint / update / duplicate / held for every candidate gap.
+
+    **Dedupe runs BEFORE the cap.** Reversed, duplicates consume the budget and push
+    real findings into the held pile — the pass then reports that it hit the cap
+    while minting nothing new, the worst of both outcomes.
+
+    **`corpus` is the FULL bead corpus, and it must not come from a title search.**
+    The store's search matches TITLES ONLY and reports that blindness in the exact
+    words of a true absence, while every directive and finding on this fleet is
+    prose in a description or a comment. A title-only dedupe is therefore
+    structurally blind to precisely what it is checking for — it would report "no
+    duplicates" most confidently for the subjects most discussed. Export the JSONL
+    and pass it here.
+
+    `dedupe=False` exists ONLY as the positive control for the check itself: a
+    dedupe that has never been observed to FIRE is not a proven dedupe, and the
+    cheapest proof is the same pass minting the duplicate when the check is off.
+    Never run a real pass with it disabled.
     """
     if cap < 0:
         raise ValueError("cap must not be negative")
-    mint: list[str] = []
-    dupes: list[tuple[str, dict]] = []
+    out = Triage()
     for c in candidates:
-        if (hit := find_duplicate(c, corpus)) is not None:
-            dupes.append((c, hit))
+        hit = find_duplicate(c, corpus, repo=repo) if dedupe else None
+        if hit is None:
+            out.mint.append(c)
+        elif is_open_watch_bead(hit):
+            out.update.append((c, hit))
         else:
-            mint.append(c)
-    return mint[:cap], dupes, mint[cap:]
+            out.duplicate.append((c, hit))
+    out.held = out.mint[cap:]
+    out.mint = out.mint[:cap]
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# The GH/PR sweep lens
+# --------------------------------------------------------------------------- #
+
+def sweep_candidate(item: dict, repo: str) -> str | None:
+    """One forge issue/PR -> the gap title a watch pass would mint for it.
+
+    Shape-agnostic on purpose. GitHub's REST/`gh` JSON and Forgejo's API agree on
+    `number`, `title` and `state` but disagree on almost everything else, and a
+    lens that only understands one of them silently sweeps half the estate — which
+    looks exactly like "the internal repos have no open issues".
+
+    A PR is distinguished from an issue by the presence of a pull-request marker,
+    which BOTH forges carry in some form. When neither is present the item is
+    treated as an issue: mislabelling a PR as an issue costs a word in a title,
+    while dropping it costs the whole finding.
+
+    Returns None for anything not OPEN, and for items with no usable title. A
+    closed issue is not a gap, and a gap with no subject cannot be deduplicated.
+    """
+    if (item.get("state") or "").lower() not in ("open", "opened"):
+        return None
+    title = (item.get("title") or "").strip()
+    number = item.get("number")
+    if not title or number is None:
+        return None
+    # PRESENCE of the marker, not its truthiness. `gh` emits `pull_request` as an
+    # object that is EMPTY for some items, and `{}` is falsy — a truthiness test
+    # therefore relabels real PRs as issues, silently and only for some of them,
+    # which is worse than getting all of them wrong because the sample looks right.
+    is_pr = any(k in item for k in ("pull_request", "head", "isPullRequest"))
+    kind = "PR" if is_pr else "issue"
+    return f"{repo} {kind} #{number} untracked: {title}"
+
+
+def sweep_candidates(items: list[dict], repo: str) -> list[str]:
+    """Every open issue/PR in a forge listing, as candidate gap titles.
+
+    Order is preserved so a cap withholds the OLDEST-listed last rather than
+    arbitrarily; forges list newest-first, so this keeps the cap biased toward
+    reporting recent activity, which is what a watcher is for.
+    """
+    out = []
+    for item in items:
+        if isinstance(item, dict) and (c := sweep_candidate(item, repo)):
+            out.append(c)
+    return out
+
+
+def mint_labels(repo: str) -> tuple[str, ...]:
+    """Labels every minted watch bead carries: the fixed pair plus the repo label.
+
+    The repo label is what makes a per-repo sweep auditable after the fact — without
+    it, "which of these came from watching X" is unanswerable once the titles age.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", repo.lower()).strip("-")
+    return WATCH_LABELS + ((slug,) if slug else ())
 
 
 # --------------------------------------------------------------------------- #
