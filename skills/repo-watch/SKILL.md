@@ -134,6 +134,27 @@ and that finding helps nobody. It is **"where do the docs state something the co
 stopped doing?"** A capability that moved leaves its old description behind, stated with
 full confidence, and that is worse than an omission because a reader acts on it.
 
+> ⚠️ **ASK THE PROGRAM, DO NOT GREP THE SOURCE — and check for an existing guard FIRST.**
+> Both halves are from a wrong finding this lens produced on its first real pass.
+>
+> A doc claim about a program's surface must be checked against **what the program builds
+> at runtime**, not against a text search for the lines that look like they build it. I
+> counted a CLI's commands by grepping its registration calls, got 26, and filed a
+> confident gap against a badge that said 29. The badge was right: three commands were not
+> literal registrations, so no text search could see them. Building the parser and reading
+> its own list of choices answers in one line and cannot miss them.
+>
+> Note the shape, because it is seductive: I had *already* corrected the naive version of
+> that grep once, and the corrected version was still wrong — it traded an overcount of
+> four for an undercount of three. **A refined wrong method reads as a careful one.**
+>
+> And before minting any docs-drift gap: **grep the test suite for the claim.** The existing
+> guard here not only asserted the command count, it also encoded a deliberate tolerance for
+> the test-count badge — never tolerating an OVERSTATED count, but allowing understatement,
+> so that adding a test does not force a README edit. My "gap" was inside that tolerance by
+> design. A repository that guards a claim has already decided what correct means for it,
+> and that decision is better informed than a fresh reading of the artefact.
+
 ### Lens 4 — code
 
 Read the delta since the anchor: `repo_watch.code_range(anchor, head)`. On a bootstrap pass
