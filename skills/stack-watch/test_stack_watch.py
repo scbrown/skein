@@ -51,6 +51,11 @@ class TestNormsOf(unittest.TestCase):
         self.assertEqual((n.name, n.tier, n.source), ("norm_ci", "block", "x-1"))
         self.assertTrue(n.enforcing)
 
+    def test_reads_a_compact_name(self):
+        n = sw.norms_of([{"n": "aegis:norm_ci", "check": "path_present",
+                          "target": ".github"}])[0]
+        self.assertEqual(n.name, "norm_ci")
+
     def test_ABSENT_tier_advises_it_does_not_block(self):
         # The dangerous default. A norm whose tier nobody set must not enforce.
         n = sw.norms_of([{"n": NS + "n", "check": "path_present", "target": "x"}])[0]

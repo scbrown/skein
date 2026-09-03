@@ -104,7 +104,9 @@ def norms_of(rows: list[dict]) -> list[Norm]:
     """Fold query rows into Norms, newest-wins on duplicate names."""
     out: dict[str, Norm] = {}
     for r in rows:
-        name = (r.get("n") or "").rsplit("/", 1)[-1]
+        # Accept both Quipu's compact default (`aegis:norm_ci`) and expanded
+        # rows; norm identity is the local name in either representation.
+        name = re.split(r"[/#:]", (r.get("n") or "").rstrip("/#:"))[-1]
         if not name:
             continue
         out[name] = Norm(

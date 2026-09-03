@@ -138,10 +138,10 @@ def rows_of(payload: dict) -> list[dict]:
 
 
 def local_name(iri: str | None) -> str | None:
-    """``.../ontology/somebody`` -> ``somebody``. Left alone if it is not an IRI."""
+    """Return the local name from an absolute IRI, CURIE, or bare name."""
     if not iri:
         return None
-    return re.split(r"[/#]", iri.rstrip("/#"))[-1] or None
+    return re.split(r"[/#:]", iri.rstrip("/#:"))[-1] or None
 
 
 def resolution_of(name: str, payload: dict) -> Resolution:
