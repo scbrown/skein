@@ -132,6 +132,9 @@ class TestLocalName(unittest.TestCase):
         self.assertEqual(rw.local_name("https://example.invalid/o/ada"), "ada")
         self.assertEqual(rw.local_name("https://example.invalid/o#ada"), "ada")
 
+    def test_splits_a_compact_iri(self):
+        self.assertEqual(rw.local_name("aegis:ada"), "ada")
+
     def test_passes_through_a_bare_name(self):
         self.assertEqual(rw.local_name("ada"), "ada")
 
