@@ -447,3 +447,46 @@ class TestForgeRefIdentity(unittest.TestCase):
                       [deferred], repo="alpha")
         self.assertEqual(r.mint, [])
         self.assertEqual(len(r.update), 1)
+
+
+class TestConflictingForgeMention(unittest.TestCase):
+    candidate = "example/alpha issue #1 untracked: precision layer"
+    mention = {"id": "closed-other", "status": "closed",
+               "title": "alpha #2: position variants",
+               "description": "Then #1 precision layer is next for example/alpha"}
+
+    def test_closed_other_object_is_reported_not_suppressed_or_minted(self):
+        r = rw.triage([self.candidate], [self.mention], repo="example/alpha")
+        self.assertEqual(r.ambiguous, [(self.candidate, self.mention)])
+        self.assertEqual(r.mint + r.duplicate + r.update + r.held, [])
+
+    def test_real_closed_tracker_wins_in_either_order(self):
+        tracker = dict(self.mention, id="tracker", title="example/alpha #1: precision")
+        for corpus in ([self.mention, tracker], [tracker, self.mention]):
+            r = rw.triage([self.candidate], corpus, repo="example/alpha")
+            self.assertEqual(r.duplicate, [(self.candidate, tracker)])
+            self.assertEqual(r.ambiguous, [])
+
+    def test_description_tracker_without_conflicting_number_still_counts(self):
+        tracker = dict(self.mention, title="alpha precision work")
+        r = rw.triage([self.candidate], [tracker], repo="example/alpha")
+        self.assertEqual(r.duplicate, [(self.candidate, tracker)])
+
+    def test_other_repository_number_is_not_a_conflict(self):
+        other = dict(self.mention, title="beta #2: position variants")
+        self.assertFalse(rw.conflicting_forge_mention(self.candidate, other, "example/alpha"))
+
+    def test_ambiguity_does_not_consume_mint_budget(self):
+        r = rw.triage([self.candidate, "Unrelated fresh finding"], [self.mention],
+                      cap=1, repo="example/alpha")
+        self.assertEqual(r.mint, ["Unrelated fresh finding"])
+        self.assertEqual(len(r.ambiguous), 1)
+        self.assertEqual(r.held, [])
+
+    def test_missing_repo_warns(self):
+        with self.assertWarnsRegex(RuntimeWarning, "require repo="):
+            rw.triage([self.candidate], [])
+
+    def test_different_owner_same_short_name_is_not_conflict(self):
+        other = dict(self.mention, title="other/alpha #2: variants")
+        self.assertFalse(rw.conflicting_forge_mention(self.candidate, other, "example/alpha"))
