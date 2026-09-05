@@ -8,7 +8,7 @@ finds more than it is allowed to mint.
 
 Design notes that are load-bearing, not decoration:
 
-* **No network, no I/O.** Every function here is pure: text in, data out. The agent
+* **No network or filesystem I/O.** Text in, data out; invalid sweep setup warns. The agent
   runs the HTTP and git; this module only builds queries and judges results. That is
   what makes the whole thing testable offline, which is the skein convention.
 
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from dataclasses import dataclass, field
 
 #: Ordered, and the order is the point. Plans establish intent; beads say what is
@@ -258,6 +259,23 @@ def refers_to_forge_object(bead: dict, repo: str, number: str) -> bool:
     return number in forge_refs(blob)
 
 
+def conflicting_forge_mention(candidate: str, bead: dict, repo: str | None) -> bool:
+    """A description reference whose title explicitly tracks another object."""
+    if not repo:
+        return False
+    title = str(bead.get("title") or "")
+    # A short repository name is normal in human-written tracking titles.
+    name = repo.rsplit("/", 1)[-1]
+    if not re.search(r"(?<![\w.-])" + re.escape(name) + r"(?![\w.-])", title, re.I):
+        return False
+    qualified = re.findall(r"[\w.-]+/" + re.escape(name) + r"(?![\w.-])", title, re.I)
+    if "/" in repo and qualified and repo.lower() not in {r.lower() for r in qualified}:
+        return False
+    titled = forge_refs(title)
+    mentioned = forge_refs(str(bead.get("description") or ""))
+    return bool(titled and (forge_refs(candidate) & mentioned) - titled)
+
+
 def find_duplicate(
     candidate: str, corpus: list[dict], threshold: float = 0.6,
     repo: str | None = None
@@ -274,6 +292,8 @@ def find_duplicate(
     not be re-minted this week — if it has regressed, that is a different bead with a
     different argument, and it deserves to be written as one.
     """
+    # Conflicting description mentions must not re-enter through fuzzy matching.
+    corpus = [b for b in corpus if not conflicting_forge_mention(candidate, b, repo)]
     # STRONGEST SIGNAL FIRST: an exact forge-object reference.
     #
     # Fuzzy title overlap CANNOT do this job and quietly fails at it. Measured on
@@ -321,7 +341,7 @@ WATCH_LABELS = ("repo-watch", "needs-triage")
 class Triage:
     """What a pass decided to do about each candidate gap.
 
-    Four outcomes, and the report names all four. A candidate that vanishes without
+    Five outcomes, and the report names all five. A candidate that vanishes without
     appearing in one of these lists is indistinguishable from one that was never
     found, which is the failure this whole structure exists to prevent.
     """
@@ -331,6 +351,8 @@ class Triage:
     update: list[tuple[str, dict]] = field(default_factory=list)
     #: (candidate, the existing bead that makes it a duplicate)
     duplicate: list[tuple[str, dict]] = field(default_factory=list)
+    #: (candidate, possible covering bead); requires explicit human adjudication
+    ambiguous: list[tuple[str, dict]] = field(default_factory=list)
     #: over the cap — withheld, never discarded
     held: list[str] = field(default_factory=list)
 
@@ -368,7 +390,7 @@ def is_open_watch_bead(bead: dict) -> bool:
 def triage(candidates: list[str], corpus: list[dict],
            cap: int = DEFAULT_MINT_CAP, dedupe: bool = True,
            repo: str | None = None) -> Triage:
-    """Decide mint / update / duplicate / held for every candidate gap.
+    """Decide mint / update / duplicate / ambiguous / held for every candidate gap.
 
     **Dedupe runs BEFORE the cap.** Reversed, duplicates consume the budget and push
     real findings into the held pile — the pass then reports that it hit the cap
@@ -389,11 +411,18 @@ def triage(candidates: list[str], corpus: list[dict],
     """
     if cap < 0:
         raise ValueError("cap must not be negative")
+    if repo is None and any(re.search(r"\b(?:issue|PR) #\d+ untracked:", c) for c in candidates):
+        warnings.warn("Forge sweep candidates require repo= for identity deduplication",
+                      RuntimeWarning, stacklevel=2)
     out = Triage()
     for c in candidates:
         hit = find_duplicate(c, corpus, repo=repo) if dedupe else None
         if hit is None:
-            out.mint.append(c)
+            conflicts = [b for b in corpus if conflicting_forge_mention(c, b, repo)] if dedupe else []
+            if conflicts:
+                out.ambiguous.extend((c, b) for b in conflicts)
+            else:
+                out.mint.append(c)
         elif is_open_watch_bead(hit):
             out.update.append((c, hit))
         else:

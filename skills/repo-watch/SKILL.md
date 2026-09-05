@@ -190,6 +190,7 @@ r = repo_watch.triage(candidates, corpus, cap=7)
 #  r.mint       -> create these, labelled repo_watch.mint_labels(repo)
 #  r.update     -> an OPEN watch bead already covers this; UPDATE it, do not re-mint
 #  r.duplicate  -> an existing bead covers it; do nothing
+#  r.ambiguous  -> report candidate AND possible bead id; human adjudication required
 #  r.held       -> over the cap. Report them: r.withheld_line(7)
 ```
 
@@ -273,3 +274,9 @@ Then tell the repo's owner. A report nobody is pointed at is a report nobody rea
 | a lens found nothing | a result — report it, do not omit it |
 | one remote far behind the other | anchor on the wrong one and every lens reads a stale tree |
 | numbers that do not reproduce | you measured in the checkout, not at the anchor |
+
+Description-only forge references whose same-repository title names another number
+are ambiguous, even when the bead is closed. Report each candidate and possible
+covering bead; do not silently suppress it or mint it as definitely untracked.
+An exact tracker, including a closed tracker, still wins. Always pass `repo=`
+for forge sweep candidates; omitting it disables forge-identity matching.
