@@ -73,12 +73,14 @@ Q() { curl -s --max-time 30 "${GRAPH_URL}/query" -X POST \
 `repo_watch.resolve_query(name, ns)` builds the query. Three things about it are
 deliberate, and each cost something to learn:
 
-- **It uses no property path.** The obvious resolver traverses aliases with
-  `?e (owl:sameAs|^owl:sameAs)* ?canon`. Aliases in this store are *denormalised* — every
-  alias is carried on the canonical entity as both `rdfs:label` and `skos:altLabel` — so a
-  plain `UNION` over those two is already total, and it stays total regardless of how the
-  endpoint evaluates zero-or-more paths. That evaluator has been wrong before, resolving 2
-  of 7 names against perfect data. It is fixed now. This query never depended on it.
+- **It follows aliases in both directions.** For each entity with an owner,
+  use `FILTER EXISTS` to test whether `(owl:sameAs|^owl:sameAs)*` reaches an exact
+  `rdfs:label` or `skos:altLabel` match. This keeps each traversal bound to one
+  ownership entity; an unbound path joined to a label UNION can scan the whole graph.
+  A one-way knot is enough, even when the matching alias has no owner and its label
+  was never copied onto the canonical entity. Zero hops retains direct ownership.
+  This is a read-only traversal: never assert inverse edges to make resolution
+  succeed, and never modify acceptance probes to simulate materialisation.
 - **It is `DISTINCT`.** Denormalisation means one name usually matches both the label and
   an altLabel of the same entity, so the un-deduplicated form returns each owner two or
   three times. Nothing is wrong when that happens, but a caller counting rows reads it as
@@ -280,3 +282,11 @@ are ambiguous, even when the bead is closed. Report each candidate and possible
 covering bead; do not silently suppress it or mint it as definitely untracked.
 An exact tracker, including a closed tracker, still wins. Always pass `repo=`
 for forge sweep candidates; omitting it disables forge-identity matching.
+
+### Resolver regression checks
+
+Run the offline suite from this directory with `python -m unittest`. To also execute
+the generated SPARQL against one-way aliases with no inference, run
+`uv run --with rdflib python -m unittest`. RDFLib is a test-only dependency;
+the resolver remains standard-library-only. Graph cases cover both edge directions,
+mixed-direction chains, cycles, missing owners and conflicting owners.
