@@ -51,10 +51,8 @@ class TestResolveQuery(unittest.TestCase):
         # entity; without DISTINCT that reads as ambiguity.
         self.assertIn("SELECT DISTINCT", rw.resolve_query("alpha", NS))
 
-    def test_uses_no_property_path(self):
-        # The path-free form is total against denormalised aliases and does not
-        # depend on how the endpoint evaluates zero-or-more paths.
-        self.assertNotIn("*", rw.resolve_query("alpha", NS))
+    def test_uses_bidirectional_alias_closure(self):
+        self.assertIn("(owl:sameAs|^owl:sameAs)*", rw.resolve_query("alpha", NS))
 
     def test_state_and_remotes_are_optional(self):
         # A repo with an owner but no recorded state must still resolve.
@@ -70,6 +68,65 @@ class TestResolveQuery(unittest.TestCase):
     def test_refuses_empty(self):
         with self.assertRaises(ValueError):
             rw.resolve_query("   ", NS)
+
+
+try:
+    import rdflib
+except ImportError:
+    rdflib = None
+
+
+@unittest.skipUnless(rdflib, "graph regression: uv run --with rdflib python -m unittest")
+class TestResolveGraph(unittest.TestCase):
+    """Execute generated SPARQL over one-way aliases, without inference."""
+
+    def setUp(self):
+        self.graph = rdflib.Graph().parse(data='''
+            @prefix a: <https://example.invalid/ontology/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+            @prefix owl: <http://www.w3.org/2002/07/owl#> .
+            a:canonical rdfs:label "canonical" ; a:owned_by a:ada ;
+                a:ownershipState "RULED" ; a:hasRemoteHost "forge.invalid" ;
+                owl:sameAs a:alias .
+            a:alias rdfs:label "alias" ; skos:altLabel "short" .
+            a:forward rdfs:label "forward" ; owl:sameAs a:canonical .
+            a:chain rdfs:label "chain" ; owl:sameAs a:alias .
+            a:unowned rdfs:label "unowned" .
+        ''', format="turtle")
+
+    def resolve(self, name):
+        rows = [{str(k): str(v) for k, v in row.asdict().items()}
+                for row in self.graph.query(rw.resolve_query(name, NS))]
+        return rw.resolution_of(name, compact(*rows))
+
+    def test_direct_forward_reverse_altlabel_and_mixed_chain(self):
+        before = set(self.graph)
+        for name in ("canonical", "forward", "alias", "short", "chain"):
+            with self.subTest(name=name):
+                result = self.resolve(name)
+                self.assertEqual(result.owner, "ada")
+                self.assertTrue(result.ruled)
+                self.assertEqual(result.remotes, ["forge.invalid"])
+        self.assertEqual(set(self.graph), before)
+
+    def test_unowned_and_missing_still_refuse(self):
+        for name in ("unowned", "missing"):
+            with self.subTest(name=name), self.assertRaises(rw.ResolutionError):
+                self.resolve(name)
+
+    def test_conflicting_owner_across_alias_refuses(self):
+        self.graph.add((rdflib.URIRef(NS + "alias"),
+                        rdflib.URIRef(NS + "owned_by"), rdflib.URIRef(NS + "bo")))
+        with self.assertRaisesRegex(rw.ResolutionError, "2 owners"):
+            self.resolve("canonical")
+
+    def test_cycle_and_repeated_owner_do_not_make_ambiguity(self):
+        self.graph.add((rdflib.URIRef(NS + "alias"), rdflib.OWL.sameAs,
+                        rdflib.URIRef(NS + "canonical")))
+        self.graph.add((rdflib.URIRef(NS + "alias"),
+                        rdflib.URIRef(NS + "owned_by"), rdflib.URIRef(NS + "ada")))
+        self.assertEqual(self.resolve("chain").owner, "ada")
 
 
 class TestRowsOf(unittest.TestCase):

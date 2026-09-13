@@ -73,13 +73,13 @@ def resolve_query(name: str, ns: str) -> str:
 
     Three properties of this query are deliberate and each one was paid for:
 
-    1. **Path-free.** The natural expression is an alias traversal
-       ``?e (owl:sameAs|^owl:sameAs)* ?canon``. The store's aliases are DENORMALISED
-       — every alias is carried on the canonical entity as both ``rdfs:label`` and
-       ``skos:altLabel`` — so a plain UNION over those two is already total, and it
-       stays total without depending on how the endpoint evaluates zero-or-more
-       paths. (That evaluator has been wrong before, resolving 2 of 7 names while the
-       data was perfect; it is fixed now, and this query never depended on it.)
+    1. **Bidirectional alias closure.** For each ownership assertion, check
+       whether ``(owl:sameAs|^owl:sameAs)*`` reaches an exact label or altLabel.
+       Zero hops preserves direct ownership; either direction supports one-way
+       knots without writing inverse edges or relying on materialisation.
+       FILTER EXISTS seeds each traversal with its ownership entity. A path
+       joined to a label UNION can instead expand the whole graph on the target
+       endpoint, even for a missing label.
 
     2. **DISTINCT.** Denormalisation means a name frequently matches BOTH the label
        and an altLabel of the same entity, so the un-deduplicated form returns the
@@ -104,10 +104,12 @@ def resolve_query(name: str, ns: str) -> str:
     return (
         "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> "
         "PREFIX skos: <http://www.w3.org/2004/02/skos/core#> "
+        "PREFIX owl: <http://www.w3.org/2002/07/owl#> "
         f"PREFIX a: <{ns}> "
         "SELECT DISTINCT ?owner ?state ?remote WHERE { "
-        f'{{ ?e rdfs:label "{name}" }} UNION {{ ?e skos:altLabel "{name}" }} '
-        "OPTIONAL { ?e a:owned_by ?owner } "
+        "?e a:owned_by ?owner . "
+        "FILTER EXISTS { ?e (owl:sameAs|^owl:sameAs)* ?match . "
+        f'{{ ?match rdfs:label "{name}" }} UNION {{ ?match skos:altLabel "{name}" }} }} '
         "OPTIONAL { ?e a:ownershipState ?state } "
         "OPTIONAL { ?e a:hasRemoteHost ?remote } "
         "} LIMIT 50"
