@@ -1,0 +1,46 @@
+name: CI
+
+# Forgejo prefers this directory to .github/workflows. The public GitHub lane
+# continues to use its hosted runner; this lane uses an existing checkout key.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: CI
+    runs-on: ci-deploy-key
+    timeout-minutes: 10
+    steps:
+      - name: Test the triggering commit in a disposable environment
+        env:
+          TARGET_SHA: ${{ github.sha }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          KEY="$HOME/.ssh/ci_readonly_deploy"
+          test -f "$KEY"
+          export GIT_SSH_COMMAND="ssh -i $KEY -o BatchMode=yes -o StrictHostKeyChecking=yes"
+          HOST=$(python3 -c 'import os, urllib.parse; print(urllib.parse.urlparse(os.environ["SERVER_URL"]).hostname)')
+          WORKDIR=$(mktemp -d)
+          trap 'rm -rf "$WORKDIR"' EXIT
+          git clone --depth 1 "ssh://git@$HOST/$REPOSITORY.git" "$WORKDIR"
+          cd "$WORKDIR"
+          git fetch --depth 1 origin "$TARGET_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          python3 -m venv .test-tools
+          .test-tools/bin/python -m pip install --disable-pip-version-check pytest
+          .test-tools/bin/python -m pytest skills -q --junitxml="$WORKDIR/results.xml"
+          .test-tools/bin/python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('results.xml').getroot()
+          suites = [root] if root.tag == 'testsuite' else list(root.findall('testsuite'))
+          count = sum(int(suite.get('tests', 0)) for suite in suites)
+          print(f'tests executed: {count}')
+          if count < 40:
+              raise SystemExit(f'only {count} tests ran; required floor is 40')
+          PY
