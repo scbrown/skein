@@ -388,6 +388,35 @@ class TestSweepLens(unittest.TestCase):
             ["a issue #1 untracked: t"])
 
 
+class TestForgeListing(unittest.TestCase):
+    """aegis-uefvp1.1: a forge refusal is CANNOT TELL, never a count."""
+
+    SCOPE_ERROR = {"message": "token does not have at least one of required scope(s): "
+                              "[read:issue]", "url": "https://forge.example/api/swagger"}
+
+    def test_a_scope_error_object_is_cannot_tell_not_two(self):
+        # Before the fix len() of this read "2 open issues" and iterating it read
+        # "none": both are numbers taken off an error.
+        with self.assertRaises(rw.ForgeListingError) as cm:
+            rw.sweep_candidates(self.SCOPE_ERROR, "owner/internal-repo")
+        msg = str(cm.exception)
+        self.assertIn("CANNOT TELL", msg)
+        self.assertIn("read:issue", msg, "the forge's own words are kept")
+        self.assertIn("owner/internal-repo", msg)
+
+    def test_an_empty_listing_is_zero(self):
+        self.assertEqual(rw.sweep_candidates([], "a"), [])
+
+    def test_a_two_item_listing_is_two(self):
+        items = [{"state": "open", "number": n, "title": f"t{n}"} for n in (1, 2)]
+        self.assertEqual(len(rw.sweep_candidates(items, "a")), 2)
+
+    def test_other_non_list_bodies_are_cannot_tell_too(self):
+        for body in (None, "Not Found", 7, {}):
+            with self.assertRaises(rw.ForgeListingError, msg=repr(body)):
+                rw.sweep_candidates(body, "a")
+
+
 class TestMintLabels(unittest.TestCase):
     def test_carries_the_fixed_pair_plus_the_repo(self):
         self.assertEqual(rw.mint_labels("alpha"), ("repo-watch", "needs-triage", "alpha"))

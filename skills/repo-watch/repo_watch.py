@@ -438,6 +438,29 @@ def triage(candidates: list[str], corpus: list[dict],
 # The GH/PR sweep lens
 # --------------------------------------------------------------------------- #
 
+class ForgeListingError(Exception):
+    """A forge answered a listing with something that is not a list: CANNOT TELL.
+
+    A forge refuses in-band. Forgejo answers a token that lacks ``read:issue``
+    with HTTP 200-shaped JSON — an OBJECT, ``{"message": ..., "url": ...}`` —
+    where a listing is an ARRAY. Counted with ``len()`` that object is "2 open
+    issues"; iterated, it is "no open issues". Both are numbers read off an
+    error. The only honest report is that this repo's open objects could not
+    be read, with the forge's own words for why (aegis-uefvp1.1).
+    """
+
+
+def forge_items(payload: object, repo: str) -> list:
+    """The items of a forge listing, or ForgeListingError when it is not one."""
+    if isinstance(payload, list):
+        return payload
+    message = payload.get("message") if isinstance(payload, dict) else None
+    raise ForgeListingError(
+        f"{repo}: CANNOT TELL: the forge returned a {type(payload).__name__}, not a "
+        f"listing" + (f": {message}" if message else "")
+    )
+
+
 def sweep_candidate(item: dict, repo: str) -> str | None:
     """One forge issue/PR -> the gap title a watch pass would mint for it.
 
@@ -469,15 +492,19 @@ def sweep_candidate(item: dict, repo: str) -> str | None:
     return f"{repo} {kind} #{number} untracked: {title}"
 
 
-def sweep_candidates(items: list[dict], repo: str) -> list[str]:
+def sweep_candidates(items: object, repo: str) -> list[str]:
     """Every open issue/PR in a forge listing, as candidate gap titles.
+
+    ``items`` is the forge's parsed JSON as returned. Anything that is not a list
+    raises ForgeListingError (CANNOT TELL): an error object must never become a
+    count, and an empty result must stay distinguishable from an unread one.
 
     Order is preserved so a cap withholds the OLDEST-listed last rather than
     arbitrarily; forges list newest-first, so this keeps the cap biased toward
     reporting recent activity, which is what a watcher is for.
     """
     out = []
-    for item in items:
+    for item in forge_items(items, repo):
         if isinstance(item, dict) and (c := sweep_candidate(item, repo)):
             out.append(c)
     return out

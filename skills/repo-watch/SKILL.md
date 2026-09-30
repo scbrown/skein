@@ -206,6 +206,12 @@ Two details that are easy to get wrong and silent when you do:
   truthiness test relabels *some* real PRs as issues, so a sample looks correct.
 - **A non-open item is not a gap.** Anything not `open` returns None rather than being
   swept up and deduplicated later.
+- **A refusal is not a count.** A forge refuses IN-BAND: Forgejo answers a token without
+  `read:issue` with a JSON **object** (`{"message": ...}`) where a listing is an array.
+  `len()` of that object is 2 and iterating it is 0 — both are numbers read off an error
+  (aegis-uefvp1.1). Pass the parsed JSON to `sweep_candidates` as-is and never count it
+  yourself: a non-list raises `ForgeListingError`, which you report as **CANNOT TELL**
+  for that repo, with the forge's message, never as a number of open issues.
 
 ## Step 3 — dedupe against the corpus, THEN cap
 
