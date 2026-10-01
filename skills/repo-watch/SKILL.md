@@ -48,6 +48,26 @@ its reports has to be audited before it can be believed, and the whole mechanism
    behind produces a pass that reads a stale tree and reports "no delta" with total
    confidence. Record which remote you anchored on, and whether the others agree.
 
+5. **Anchor on the REMOTE, and verify the old anchor is still reachable from it.**
+   Record with `git rev-parse origin/main`, never `HEAD` — HEAD belongs to whoever last
+   touched that checkout, and on a shared checkout that is not you. Then verify:
+
+       anchor = repo_watch.verify_anchor(anchor, repo_path)   # raises UnreachableAnchor
+
+   ⚠️ **An UNREACHABLE anchor is worse than a stale one, and it is nearly invisible.** A stale
+   anchor is behind but resolvable, so the delta is merely out of date. An unreachable anchor
+   makes the delta **uncomputable**, and `code_range` has no range to return — so a
+   conscientious pass reports "BOOTSTRAP — no delta" and restates the repo's current state as
+   new findings. Measured (internal-ref): shantytown's 2026-08-30 pass anchored on `5a301c7e`,
+   a LOCAL unpushed commit on a side branch — present in 1 of 36 clones and **0 remote refs**.
+   The next pass would have reported a clean first look at the repo with the highest churn of
+   the night, and only a hand check caught it.
+
+   `verify_anchor` now REFUSES that, and `code_range` raises rather than returning `None`, so
+   the two cases can never again render the same. A **failed fetch** leaves `reachable=None`,
+   not `False` — "could not ask" and "asked, it is gone" have opposite remedies (re-run vs
+   re-anchor), so an outage must not read as data loss.
+
 > ⚠️ **MEASURE IN THE TREE YOU ANCHORED ON.** This is the mistake this skill's own first pass
 > made, so it is written at the top rather than in a footnote: the anchor was taken from the
 > tracked remote, the measurements were run in the working checkout, and the checkout was 73
@@ -159,7 +179,9 @@ full confidence, and that is worse than an omission because a reader acts on it.
 
 ### Lens 4 — code
 
-Read the delta since the anchor: `repo_watch.code_range(anchor, head)`. On a bootstrap pass
+Read the delta since the anchor: `repo_watch.code_range(anchor, head)` — which RAISES
+`UnreachableAnchor` if the recorded sha resolves in no clone of the canonical remote (step 5).
+Do not catch it into a bootstrap: that is the internal-ref defect. On a bootstrap pass
 this is `None` — a first pass has no delta, and manufacturing one restates the entire
 repository as new findings. Record the anchor, report the current state from the other
 three lenses, and say plainly that it was a bootstrap.
@@ -184,6 +206,12 @@ Two details that are easy to get wrong and silent when you do:
   truthiness test relabels *some* real PRs as issues, so a sample looks correct.
 - **A non-open item is not a gap.** Anything not `open` returns None rather than being
   swept up and deduplicated later.
+- **A refusal is not a count.** A forge refuses IN-BAND: Forgejo answers a token without
+  `read:issue` with a JSON **object** (`{"message": ...}`) where a listing is an array.
+  `len()` of that object is 2 and iterating it is 0 — both are numbers read off an error
+  (internal-ref.1). Pass the parsed JSON to `sweep_candidates` as-is and never count it
+  yourself: a non-list raises `ForgeListingError`, which you report as **CANNOT TELL**
+  for that repo, with the forge's message, never as a number of open issues.
 
 ## Step 3 — dedupe against the corpus, THEN cap
 

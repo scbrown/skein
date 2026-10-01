@@ -438,6 +438,29 @@ def triage(candidates: list[str], corpus: list[dict],
 # The GH/PR sweep lens
 # --------------------------------------------------------------------------- #
 
+class ForgeListingError(Exception):
+    """A forge answered a listing with something that is not a list: CANNOT TELL.
+
+    A forge refuses in-band. Forgejo answers a token that lacks ``read:issue``
+    with HTTP 200-shaped JSON — an OBJECT, ``{"message": ..., "url": ...}`` —
+    where a listing is an ARRAY. Counted with ``len()`` that object is "2 open
+    issues"; iterated, it is "no open issues". Both are numbers read off an
+    error. The only honest report is that this repo's open objects could not
+    be read, with the forge's own words for why (internal-ref.1).
+    """
+
+
+def forge_items(payload: object, repo: str) -> list:
+    """The items of a forge listing, or ForgeListingError when it is not one."""
+    if isinstance(payload, list):
+        return payload
+    message = payload.get("message") if isinstance(payload, dict) else None
+    raise ForgeListingError(
+        f"{repo}: CANNOT TELL: the forge returned a {type(payload).__name__}, not a "
+        f"listing" + (f": {message}" if message else "")
+    )
+
+
 def sweep_candidate(item: dict, repo: str) -> str | None:
     """One forge issue/PR -> the gap title a watch pass would mint for it.
 
@@ -469,15 +492,19 @@ def sweep_candidate(item: dict, repo: str) -> str | None:
     return f"{repo} {kind} #{number} untracked: {title}"
 
 
-def sweep_candidates(items: list[dict], repo: str) -> list[str]:
+def sweep_candidates(items: object, repo: str) -> list[str]:
     """Every open issue/PR in a forge listing, as candidate gap titles.
+
+    ``items`` is the forge's parsed JSON as returned. Anything that is not a list
+    raises ForgeListingError (CANNOT TELL): an error object must never become a
+    count, and an empty result must stay distinguishable from an unread one.
 
     Order is preserved so a cap withholds the OLDEST-listed last rather than
     arbitrarily; forges list newest-first, so this keeps the cap biased toward
     reporting recent activity, which is what a watcher is for.
     """
     out = []
-    for item in items:
+    for item in forge_items(items, repo):
         if isinstance(item, dict) and (c := sweep_candidate(item, repo)):
             out.append(c)
     return out
@@ -497,6 +524,17 @@ def mint_labels(repo: str) -> tuple[str, ...]:
 # The watch anchor
 # --------------------------------------------------------------------------- #
 
+class UnreachableAnchor(Exception):
+    """The recorded anchor resolves in no clone of the canonical remote.
+
+    Raised rather than returned because the alternative is the defect: an
+    unreachable anchor makes the delta UNCOMPUTABLE, and an uncomputable delta is
+    indistinguishable from a first pass. A pass that swallows it reports
+    "BOOTSTRAP - no delta" and restates the repo's current state as new findings,
+    which is a confident wrong answer on the repo with the most churn.
+    """
+
+
 @dataclass
 class Anchor:
     """Where the last pass stopped. ``sha is None`` means no pass has ever run."""
@@ -504,10 +542,64 @@ class Anchor:
     repo: str
     sha: str | None = None
     run: str | None = None
+    #: The canonical remote this sha was taken from. Recorded BESIDE the sha so a
+    #: repo that later changes forge (shantytown moved Forgejo -> GitHub,
+    #: internal-ref) leaves evidence instead of a mystery.
+    remote: str | None = None
+    #: Is the sha reachable from the canonical remote? None means NOBODY ASKED,
+    #: and it is deliberately not False: "we did not check" and "we checked and
+    #: it is gone" must not render the same. `verify` sets it.
+    reachable: bool | None = None
 
     @property
     def bootstrap(self) -> bool:
         return self.sha is None
+
+
+def verify_anchor(anchor: Anchor, repo_path, run=None,
+                  remote_ref: str = "origin/main") -> Anchor:
+    """Fill in ``reachable`` and ``remote`` by asking git, and REFUSE a bad anchor.
+
+    THE ANCHOR MUST COME FROM THE REMOTE, NOT FROM A CHECKOUT. The 2026-08-30
+    shantytown pass anchored on a working checkout's HEAD while the tracked remote
+    never had that commit, so the next pass had nothing to measure against. Record
+    with `git rev-parse origin/main`, never `HEAD` - HEAD belongs to whoever last
+    touched that checkout, and on a shared checkout that is not you.
+
+    A FAILED FETCH LEAVES reachable=None, NOT False. "We could not ask" and "we
+    asked and it is gone" have opposite remedies - one is re-run when the network
+    is back, the other is re-anchor - and collapsing them would make an outage
+    look like data loss. The caller decides what to do with None; this never
+    invents an answer it did not get.
+    """
+    import subprocess
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(repo_path), *args],
+                              capture_output=True, text=True)
+
+    if run is not None:                      # injectable for tests
+        git = run
+
+    url = git("remote", "get-url", "origin")
+    anchor.remote = (url.stdout or "").strip() or None
+    if anchor.bootstrap:
+        return anchor                        # nothing to reach yet; not a failure
+
+    fetched = git("fetch", "origin", "--quiet")
+    if fetched.returncode != 0:
+        anchor.reachable = None              # could not ask - see docstring
+        return anchor
+
+    r = git("merge-base", "--is-ancestor", anchor.sha, remote_ref)
+    anchor.reachable = (r.returncode == 0)
+    if anchor.reachable is False:
+        raise UnreachableAnchor(
+            f"{anchor.repo}: anchor {anchor.sha} is not an ancestor of "
+            f"{remote_ref} on {anchor.remote or 'origin'} - it exists in no "
+            f"clone but the one that recorded it. Re-anchor from "
+            f"`git rev-parse {remote_ref}`.")
+    return anchor
 
 
 def code_range(anchor: Anchor, head: str) -> str | None:
@@ -518,6 +610,19 @@ def code_range(anchor: Anchor, head: str) -> str | None:
     as new findings. The honest first pass records the anchor and reads the current
     state, which is what the plans and beads lenses do anyway.
     """
+    if anchor.reachable is False:
+        # NOT None. An anchor nobody else can resolve is not an anchor, and
+        # returning None here would spell it "bootstrap" - the exact silent
+        # degradation this guard exists to stop (internal-ref). Measured on
+        # shantytown's 2026-08-30 pass: the anchor 5a301c7e was a LOCAL unpushed
+        # commit on a side branch, present in 1 of 36 clones and in 0 remote
+        # refs, so `git rev-list 5a301c7e..origin/main` could not be computed at
+        # all and the pass would have reported a clean first look.
+        raise UnreachableAnchor(
+            f"{anchor.repo}: anchor {anchor.sha} is not reachable from "
+            f"{anchor.remote or 'the canonical remote'} - the delta is "
+            f"UNCOMPUTABLE, not empty. Re-anchor from a pushed commit "
+            f"(`git rev-parse origin/main`), never from a working checkout's HEAD.")
     if anchor.bootstrap or anchor.sha == head:
         return None
     return f"{anchor.sha}..{head}"

@@ -388,6 +388,35 @@ class TestSweepLens(unittest.TestCase):
             ["a issue #1 untracked: t"])
 
 
+class TestForgeListing(unittest.TestCase):
+    """internal-ref.1: a forge refusal is CANNOT TELL, never a count."""
+
+    SCOPE_ERROR = {"message": "token does not have at least one of required scope(s): "
+                              "[read:issue]", "url": "https://forge.example/api/swagger"}
+
+    def test_a_scope_error_object_is_cannot_tell_not_two(self):
+        # Before the fix len() of this read "2 open issues" and iterating it read
+        # "none": both are numbers taken off an error.
+        with self.assertRaises(rw.ForgeListingError) as cm:
+            rw.sweep_candidates(self.SCOPE_ERROR, "owner/internal-repo")
+        msg = str(cm.exception)
+        self.assertIn("CANNOT TELL", msg)
+        self.assertIn("read:issue", msg, "the forge's own words are kept")
+        self.assertIn("owner/internal-repo", msg)
+
+    def test_an_empty_listing_is_zero(self):
+        self.assertEqual(rw.sweep_candidates([], "a"), [])
+
+    def test_a_two_item_listing_is_two(self):
+        items = [{"state": "open", "number": n, "title": f"t{n}"} for n in (1, 2)]
+        self.assertEqual(len(rw.sweep_candidates(items, "a")), 2)
+
+    def test_other_non_list_bodies_are_cannot_tell_too(self):
+        for body in (None, "Not Found", 7, {}):
+            with self.assertRaises(rw.ForgeListingError, msg=repr(body)):
+                rw.sweep_candidates(body, "a")
+
+
 class TestMintLabels(unittest.TestCase):
     def test_carries_the_fixed_pair_plus_the_repo(self):
         self.assertEqual(rw.mint_labels("alpha"), ("repo-watch", "needs-triage", "alpha"))
@@ -547,3 +576,76 @@ class TestConflictingForgeMention(unittest.TestCase):
     def test_different_owner_same_short_name_is_not_conflict(self):
         other = dict(self.mention, title="other/alpha #2: variants")
         self.assertFalse(rw.conflicting_forge_mention(self.candidate, other, "example/alpha"))
+
+
+# --- an anchor no other clone can reach (internal-ref) ----------------------
+# Measured on shantytown's 2026-08-30 pass: the anchor was a LOCAL unpushed
+# commit on a side branch — present in 1 of 36 clones and 0 remote refs — so the
+# delta was UNCOMPUTABLE and the pass would have reported a clean first look on
+# the repo with the highest churn of the night.
+
+def _fake_git(**codes):
+    """A git stub keyed by subcommand; returns rc from `codes`, default 0."""
+    import subprocess
+
+    def run(*args):
+        sub = args[0]
+        rc = codes.get(sub, 0)
+        out = codes.get(f"{sub}_out", "")
+        return subprocess.CompletedProcess(args, rc, out, "")
+    return run
+
+
+def test_an_unreachable_anchor_RAISES_and_does_not_spell_itself_bootstrap():
+    a = rw.Anchor(repo="shantytown", sha="5a301c7e", reachable=False,
+               remote="git@github.com:scbrown/shantytown.git")
+    try:
+        rw.code_range(a, "deadbeef")
+    except rw.UnreachableAnchor as e:
+        assert "5a301c7e" in str(e) and "UNCOMPUTABLE" in str(e)
+    else:
+        raise AssertionError(
+            "an unreachable anchor must REFUSE; returning None spells it "
+            "'bootstrap', which is the defect")
+
+
+def test_a_reachable_anchor_is_unaffected():
+    """CONTROL. Without it, raising unconditionally would pass the test above
+    while breaking every healthy pass."""
+    a = rw.Anchor(repo="r", sha="aaa", reachable=True)
+    assert rw.code_range(a, "bbb") == "aaa..bbb"
+    assert rw.code_range(rw.Anchor(repo="r", sha=None), "bbb") is None   # real bootstrap
+    assert rw.code_range(rw.Anchor(repo="r", sha="aaa"), "aaa") is None  # nothing moved
+
+
+def test_an_UNCHECKED_anchor_still_computes_its_range():
+    """reachable=None means nobody asked. That must not become a refusal — it
+    would break every caller that has not adopted rw.verify_anchor yet."""
+    assert rw.code_range(rw.Anchor(repo="r", sha="aaa"), "bbb") == "aaa..bbb"
+
+
+def test_verify_anchor_refuses_when_the_sha_is_not_an_ancestor():
+    a = rw.Anchor(repo="shantytown", sha="5a301c7e")
+    try:
+        rw.verify_anchor(a, "/nowhere", run=_fake_git(**{"merge-base": 1}))
+    except rw.UnreachableAnchor as e:
+        assert "5a301c7e" in str(e)
+    else:
+        raise AssertionError("rw.verify_anchor must refuse a non-ancestor anchor")
+
+
+def test_a_FAILED_FETCH_leaves_reachable_None_not_False():
+    """'Could not ask' and 'asked, it is gone' have OPPOSITE remedies — re-run vs
+    re-anchor — so an outage must not render as data loss."""
+    a = rw.Anchor(repo="r", sha="aaa")
+    got = rw.verify_anchor(a, "/nowhere", run=_fake_git(fetch=1))
+    assert got.reachable is None, "a failed fetch must not assert unreachable"
+    assert rw.code_range(got, "bbb") == "aaa..bbb"
+
+
+def test_bootstrap_records_the_remote_without_claiming_reachability():
+    a = rw.Anchor(repo="r", sha=None)
+    got = rw.verify_anchor(a, "/nowhere",
+                        run=_fake_git(**{"remote_out": "git@github.com:x/y.git\n"}))
+    assert got.remote == "git@github.com:x/y.git"
+    assert got.reachable is None
