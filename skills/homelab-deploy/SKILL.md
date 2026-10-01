@@ -16,7 +16,7 @@ Homelab deploys fall into three categories. Identify which one before acting.
 
 | Present | This skill uses it for | Absent — what happens |
 |---|---|---|
-| **[hank](https://github.com/scbrown/hank)** | `hank impact <symbol>` — what a code change actually reaches, before you ship it | you deploy on a guess about blast radius, or read the call graph by hand |
+| **[yupana](https://github.com/scbrown/yupana)** | `yupana impact <symbol>` — what a code change actually reaches, before you ship it | you deploy on a guess about blast radius, or read the call graph by hand |
 | **[bobbin](https://github.com/scbrown/bobbin)** | `bobbin search` / `bobbin related` — find the config and the coupled files you'd otherwise miss | `grep`, and whatever you forget isn't in the diff |
 | **[metrics-query](../metrics-query/SKILL.md)** | the post-deploy verify — `up`, error rate, restart count | `curl` the health endpoint once and hope |
 | **[quipu](../quipu/SKILL.md)** | what depends on this service, and what broke last time | deploy without the dependency map |
@@ -28,13 +28,13 @@ A deploy is a change to a running system, and the expensive part is never the
 copy — it is the thing downstream you did not know was downstream.
 
 ```bash
-hank impact <symbol>            # symbols transitively affected by changing this
-hank impact <symbol> --json     # same, machine-readable
+yupana impact <symbol>            # symbols transitively affected by changing this
+yupana impact <symbol> --json     # same, machine-readable
 bobbin related <path>           # files that historically change WITH this one
 bobbin review                   # review context assembled from the git diff
 ```
 
-`hank impact` reads the call graph; `bobbin related` reads *git history*, and
+`yupana impact` reads the call graph; `bobbin related` reads *git history*, and
 they disagree in the interesting cases — a config file and a template that always
 change together have no import edge between them. **Two different kinds of
 coupling, and the one that bites is usually the one with no edge in the code.**
