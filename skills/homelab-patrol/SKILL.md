@@ -186,7 +186,7 @@ A finding that lives only in a terminal is a finding the next patrol repeats.
   [graph-extract](../graph-extract/SKILL.md) so the next agent finds it by
   searching rather than by breaking the same thing again.
 - **If the finding points into code you don't know**, `bobbin search "<symptom>"`
-  and `hank impact <symbol>` beat grepping a repo you have never read. See
+  and `yupana impact <symbol>` beat grepping a repo you have never read. See
   [homelab-deploy](../homelab-deploy/SKILL.md) for the blast-radius pattern.
 
 ## Anti-Patterns
