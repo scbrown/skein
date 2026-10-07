@@ -467,8 +467,6 @@ class TestLenses(unittest.TestCase):
         self.assertEqual(rw.LENSES, ("plans", "beads", "docs", "code", "sweep"))
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestForgeRefIdentity(unittest.TestCase):
@@ -596,56 +594,73 @@ def _fake_git(**codes):
     return run
 
 
-def test_an_unreachable_anchor_RAISES_and_does_not_spell_itself_bootstrap():
-    a = rw.Anchor(repo="shantytown", sha="5a301c7e", reachable=False,
-               remote="git@github.com:scbrown/shantytown.git")
-    try:
-        rw.code_range(a, "deadbeef")
-    except rw.UnreachableAnchor as e:
-        assert "5a301c7e" in str(e) and "UNCOMPUTABLE" in str(e)
-    else:
-        raise AssertionError(
-            "an unreachable anchor must REFUSE; returning None spells it "
-            "'bootstrap', which is the defect")
+class TestVerifyAnchor(unittest.TestCase):
+    """Collected by `python -m unittest` too (aegis-hvt47u): as bare module-level
+    functions these six anchor-safety tests ran under pytest only, so the suite the
+    SKILL.md tells you to run skipped every one of them."""
+
+    def test_an_unreachable_anchor_RAISES_and_does_not_spell_itself_bootstrap(self):
+        a = rw.Anchor(repo="shantytown", sha="5a301c7e", reachable=False,
+                   remote="git@github.com:scbrown/shantytown.git")
+        try:
+            rw.code_range(a, "deadbeef")
+        except rw.UnreachableAnchor as e:
+            assert "5a301c7e" in str(e) and "UNCOMPUTABLE" in str(e)
+        else:
+            raise AssertionError(
+                "an unreachable anchor must REFUSE; returning None spells it "
+                "'bootstrap', which is the defect")
 
 
-def test_a_reachable_anchor_is_unaffected():
-    """CONTROL. Without it, raising unconditionally would pass the test above
-    while breaking every healthy pass."""
-    a = rw.Anchor(repo="r", sha="aaa", reachable=True)
-    assert rw.code_range(a, "bbb") == "aaa..bbb"
-    assert rw.code_range(rw.Anchor(repo="r", sha=None), "bbb") is None   # real bootstrap
-    assert rw.code_range(rw.Anchor(repo="r", sha="aaa"), "aaa") is None  # nothing moved
+    def test_a_reachable_anchor_is_unaffected(self):
+        """CONTROL. Without it, raising unconditionally would pass the test above
+        while breaking every healthy pass."""
+        a = rw.Anchor(repo="r", sha="aaa", reachable=True)
+        assert rw.code_range(a, "bbb") == "aaa..bbb"
+        assert rw.code_range(rw.Anchor(repo="r", sha=None), "bbb") is None   # real bootstrap
+        assert rw.code_range(rw.Anchor(repo="r", sha="aaa"), "aaa") is None  # nothing moved
 
 
-def test_an_UNCHECKED_anchor_still_computes_its_range():
-    """reachable=None means nobody asked. That must not become a refusal — it
-    would break every caller that has not adopted rw.verify_anchor yet."""
-    assert rw.code_range(rw.Anchor(repo="r", sha="aaa"), "bbb") == "aaa..bbb"
+    def test_an_UNCHECKED_anchor_still_computes_its_range(self):
+        """reachable=None means nobody asked. That must not become a refusal — it
+        would break every caller that has not adopted rw.verify_anchor yet."""
+        assert rw.code_range(rw.Anchor(repo="r", sha="aaa"), "bbb") == "aaa..bbb"
 
 
-def test_verify_anchor_refuses_when_the_sha_is_not_an_ancestor():
-    a = rw.Anchor(repo="shantytown", sha="5a301c7e")
-    try:
-        rw.verify_anchor(a, "/nowhere", run=_fake_git(**{"merge-base": 1}))
-    except rw.UnreachableAnchor as e:
-        assert "5a301c7e" in str(e)
-    else:
-        raise AssertionError("rw.verify_anchor must refuse a non-ancestor anchor")
+    def test_verify_anchor_refuses_when_the_sha_is_not_an_ancestor(self):
+        a = rw.Anchor(repo="shantytown", sha="5a301c7e")
+        try:
+            rw.verify_anchor(a, "/nowhere", run=_fake_git(**{"merge-base": 1}))
+        except rw.UnreachableAnchor as e:
+            assert "5a301c7e" in str(e)
+        else:
+            raise AssertionError("rw.verify_anchor must refuse a non-ancestor anchor")
 
 
-def test_a_FAILED_FETCH_leaves_reachable_None_not_False():
-    """'Could not ask' and 'asked, it is gone' have OPPOSITE remedies — re-run vs
-    re-anchor — so an outage must not render as data loss."""
-    a = rw.Anchor(repo="r", sha="aaa")
-    got = rw.verify_anchor(a, "/nowhere", run=_fake_git(fetch=1))
-    assert got.reachable is None, "a failed fetch must not assert unreachable"
-    assert rw.code_range(got, "bbb") == "aaa..bbb"
+    def test_a_FAILED_FETCH_leaves_reachable_None_not_False(self):
+        """'Could not ask' and 'asked, it is gone' have OPPOSITE remedies — re-run vs
+        re-anchor — so an outage must not render as data loss."""
+        a = rw.Anchor(repo="r", sha="aaa")
+        got = rw.verify_anchor(a, "/nowhere", run=_fake_git(fetch=1))
+        assert got.reachable is None, "a failed fetch must not assert unreachable"
+        assert rw.code_range(got, "bbb") == "aaa..bbb"
 
 
-def test_bootstrap_records_the_remote_without_claiming_reachability():
-    a = rw.Anchor(repo="r", sha=None)
-    got = rw.verify_anchor(a, "/nowhere",
-                        run=_fake_git(**{"remote_out": "git@github.com:x/y.git\n"}))
-    assert got.remote == "git@github.com:x/y.git"
-    assert got.reachable is None
+    def test_bootstrap_records_the_remote_without_claiming_reachability(self):
+        a = rw.Anchor(repo="r", sha=None)
+        got = rw.verify_anchor(a, "/nowhere",
+                            run=_fake_git(**{"remote_out": "git@github.com:x/y.git\n"}))
+        assert got.remote == "git@github.com:x/y.git"
+        assert got.reachable is None
+
+    def test_verify_anchor_REFUSES_a_bare_sha_with_a_TypeError_that_names_Anchor(self):
+        """The SKILL.md recipe says "record with git rev-parse", then verify_anchor(anchor, ...).
+        Passing that sha string died with AttributeError: 'str' object has no attribute
+        'remote' (aegis-hvt47u) - an error about nothing the caller wrote."""
+        with self.assertRaises(TypeError) as cm:
+            rw.verify_anchor("b7014d8", "/nowhere", run=_fake_git())
+        self.assertIn("Anchor(", str(cm.exception))
+
+
+if __name__ == "__main__":
+    unittest.main()

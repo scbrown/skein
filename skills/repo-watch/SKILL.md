@@ -52,7 +52,10 @@ its reports has to be audited before it can be believed, and the whole mechanism
    Record with `git rev-parse origin/main`, never `HEAD` — HEAD belongs to whoever last
    touched that checkout, and on a shared checkout that is not you. Then verify:
 
-       anchor = repo_watch.verify_anchor(anchor, repo_path)   # raises UnreachableAnchor
+       anchor = repo_watch.verify_anchor(
+           repo_watch.Anchor(repo=name, sha=prior_sha), repo_path)   # raises UnreachableAnchor
+
+   It takes an `Anchor`, not a bare sha; a string is refused with a `TypeError`.
 
    ⚠️ **An UNREACHABLE anchor is worse than a stale one, and it is nearly invisible.** A stale
    anchor is behind but resolvable, so the delta is merely out of date. An unreachable anchor
@@ -267,9 +270,17 @@ is a fact in the record rather than a claim in prose.
 
 ```bash
 shuttle start repo-watch "$(python3 -c 'import repo_watch,sys; ...')" --agent "$OWNER"
-shuttle advance "$RUN" --step observed --agent "$OWNER"
+shuttle advance "$RUN" --step anchor  --agent "$OWNER"   # pending  -> anchored
+shuttle advance "$RUN" --step observe --agent "$OWNER"   # anchored -> observed
+# ... the five lenses, the mint, the report bead ...
+shuttle advance "$RUN" --step report  --agent "$OWNER"   # observed -> reported (terminal)
 shuttle export
 ```
+
+`observed` and `reported` are STATE names; the STEPS are `anchor`, `observe`, `report`.
+Passing a state name as `--step` is refused with the legal steps listed. Verify the run with
+`shuttle verify "$RUN"`: it reads the exported transitions back from the window graph and
+checks each signature.
 
 > ⚠️ **A shuttle `/knot` lands in a WINDOW graph, not the root graph.** An anchor read back
 > in default scope returns ZERO rows — which looks exactly like the advance never landed,

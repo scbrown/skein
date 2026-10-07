@@ -574,6 +574,15 @@ def verify_anchor(anchor: Anchor, repo_path, run=None,
     """
     import subprocess
 
+    # A bare sha is the natural thing to pass - the step before this one says to
+    # record it with `git rev-parse` - and it used to die with "'str' object has no
+    # attribute 'remote'", an error about nothing the caller wrote (aegis-hvt47u).
+    # Refuse it by name instead of guessing a repo for it.
+    if not isinstance(anchor, Anchor):
+        raise TypeError(
+            f"verify_anchor takes an Anchor, not {type(anchor).__name__} {anchor!r}: "
+            f"wrap it as Anchor(repo=<name>, sha=<sha>)")
+
     def git(*args):
         return subprocess.run(["git", "-C", str(repo_path), *args],
                               capture_output=True, text=True)
