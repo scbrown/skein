@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/skills-13-E39A4E.svg" alt="13 skills"/>
   <img src="https://img.shields.io/badge/skein_runtime-none-3E9E9A.svg" alt="skein ships no runtime"/>
   <img src="https://img.shields.io/badge/install-copy%20a%20directory-8C98A8.svg" alt="Install is copying a directory"/>
-  <img src="https://img.shields.io/badge/drives-bobbin%20·%20quipu%20·%20hank%20·%20st-6C7A89.svg" alt="Drives bobbin, quipu, hank, shantytown"/>
+  <img src="https://img.shields.io/badge/drives-bobbin%20·%20quipu%20·%20yupana%20·%20st-6C7A89.svg" alt="Drives bobbin, quipu, yupana, shantytown"/>
   <img src="https://img.shields.io/badge/agents-any%20SKILL.md-lightgrey.svg" alt="Works with any agent that reads SKILL.md"/>
 </p>
 
@@ -48,7 +48,7 @@ tool; skein is how an agent actually drives them.
                     └──┬─────────┬─────────┬─────────┬─────┘
                        │         │         │         │
                ┌───────▼──┐ ┌────▼────┐ ┌──▼───┐ ┌───▼────────┐
-               │  bobbin  │ │  quipu  │ │ hank │ │ shantytown │
+               │  bobbin  │ │  quipu  │ │yupana│ │ shantytown │
                │   code   │ │ memory  │ │struct│ │  the crew  │
                └───────┬──┘ └────┬────┘ └──┬───┘ └───┬────────┘
                        │         │         │         │
@@ -62,7 +62,7 @@ tool; skein is how an agent actually drives them.
 |---|---|---|---|
 | **[bobbin](https://github.com/scbrown/bobbin)** | code search + git coupling | *what does this code say?* | homelab-deploy · homelab-patrol · planning-with-files · dispatch-work |
 | **[quipu](https://github.com/scbrown/quipu)** | RDF/SPARQL knowledge graph | *what do we already know?* | **quipu · graph-extract · graph-report** |
-| **[hank](https://github.com/scbrown/hank)** | code structure + policy guards | *what will this break?* | homelab-deploy · planning-with-files · quipu |
+| **[yupana](https://github.com/scbrown/yupana)** | code structure + policy guards | *what will this break?* | homelab-deploy · planning-with-files · quipu |
 | **[shantytown](https://github.com/scbrown/shantytown)** | agent crew harness (`st`) | *who does the work?* | **dispatch-work** |
 | **[shanty](https://github.com/scbrown/shanty)** | tmux wrapper + status bar | *where you watch it* | — |
 | **skein** | *this repo* | *how an agent drives all of it* | — |
@@ -210,7 +210,7 @@ lockfile, no build step.
 | 📮 **dispatch-work** | Hand a work item to another agent — check the pane is ready, send, verify it landed. Refuses to interrupt a busy agent. | `tmux`; `st` preferred | bundled stdlib engine over plain tmux |
 | 📈 **metrics-query** | PromQL queries, scrape-target health, alert triage — with an empty result reported as its own outcome, not as good news. | **Prometheus** / Alertmanager | **nothing.** Exits `3` and says it queried nothing |
 | 📣 **notify** | Push a finding to a human via ntfy or a JSON webhook, reporting per-transport acceptance. | **ntfy or a webhook** | **nothing.** Exits `3`: "NOTHING WAS SENT" |
-| 🚀 **homelab-deploy** | Deploy services — binaries, configs, IaC, rollback. IaC-first, verify-after. | — | full shell path; `hank`/`bobbin` sharpen blast radius |
+| 🚀 **homelab-deploy** | Deploy services — binaries, configs, IaC, rollback. IaC-first, verify-after. | — | full shell path; `yupana`/`bobbin` sharpen blast radius |
 | 🩺 **homelab-patrol** | Health checks across a fleet. "What's broken?" — from live data, never memory. | — | full shell path; Prometheus adds history |
 | 🔎 **quipu** | Query the graph before you act — and what the graph is *not* to be trusted about. | **Quipu endpoint** | **nothing.** No offline mode, by design |
 | 🧬 **graph-extract** | Extract entities and relationships from docs, code, and issues into the graph. | **Quipu endpoint** | **nothing.** Saves the payload; never claims a write |
@@ -230,7 +230,7 @@ is no plugin API to target, so there is nothing to port when you change agents.
 package manager, no lockfile, no build, no daemon to keep alive.
 
 🔗 **Reaches for the better tool first** — where a real tool does the job properly, the skill drives
-it: `st` for dispatch, `bobbin` for search, `hank` for blast radius, Quipu for memory, Prometheus
+it: `st` for dispatch, `bobbin` for search, `yupana` for blast radius, Quipu for memory, Prometheus
 for history. Where it isn't installed, the skill takes the documented fallback — or refuses, and
 says which.
 
