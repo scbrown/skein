@@ -1,8 +1,8 @@
 ---
 name: repo-watch
 description: >-
-  Run a watch pass over one repository — read its plans, its open beads, its docs, its
-  code delta and its open forge issues/PRs through five ordered lenses, and mint a bead
+  Run a watch pass over one repository — read its plans, its open items, its docs, its
+  code delta and its open forge issues/PRs through five ordered lenses, and mint an item
   for every gap between what the repo promises and what it ships. Read-only against the repository: a watch pass never
   edits, pushes, merges, deploys, or touches an issue or pull request. Owner, remotes and
   norms are resolved from the knowledge graph at run time, never hardcoded. Triggers on
@@ -18,7 +18,7 @@ allowed-tools:
 # repo-watch — what does this repo promise that it does not ship?
 
 A watch pass reads one repository through five lenses, in order, and produces **one watch
-report plus a bead for every gap it can evidence**. It changes nothing.
+report plus an item for every gap it can evidence**. It changes nothing.
 
 The unit of output is a gap: *X promises, Y delivers.* Not an opinion, not a wish, not a
 refactor you would enjoy. If you cannot name both halves and cite where each lives, you
@@ -28,7 +28,7 @@ have not found a gap and you should not mint one.
 
 **It is read-only against the repository and against the forge.** No commits, no pushes,
 no merges, no deploys, no branch or tag creation, no issue or pull-request mutation, no
-comment on a pull request, no production action. The only writes a pass makes are bead
+comment on a pull request, no production action. The only writes a pass makes are item
 tracking and reporting, and an append to its own run log.
 
 This is not caution for its own sake. A watcher is trusted precisely because its findings
@@ -74,7 +74,7 @@ its reports has to be audited before it can be believed, and the whole mechanism
 > ⚠️ **MEASURE IN THE TREE YOU ANCHORED ON.** This is the mistake this skill's own first pass
 > made, so it is written at the top rather than in a footnote: the anchor was taken from the
 > tracked remote, the measurements were run in the working checkout, and the checkout was 73
-> commits ahead. Two of the four numbers in the first gap bead were wrong — each individually
+> commits ahead. Two of the four numbers in the first gap item were wrong — each individually
 > plausible, none reproducible from the stated anchor.
 >
 > A finding is only as good as the tree it was measured in, and a report that names one sha
@@ -121,21 +121,21 @@ doing it.
 
 ## Step 2 — the five lenses, in this order
 
-The order is the contract. Plans establish intent; beads say what is already claimed; docs
+The order is the contract. Plans establish intent; items say what is already claimed; docs
 state what was promised; code says what is true. Reading them in this order means every
 later lens can cite an earlier one, and every gap comes out phrased as a comparison rather
 than a complaint.
 
 ### Lens 1 — plans
 
-Read the design docs and any design-labelled beads. You are looking for **status banners
+Read the design docs and any design-labelled items. You are looking for **status banners
 that contradict the repo's own history**: a plan marked "not started" for something that
 shipped, a "rejected" decision the code now implements, two plans that assume different
 answers to the same question.
 
-### Lens 2 — beads
+### Lens 2 — items
 
-Read the **full corpus** — every bead, not the ready pool and not a title search. Both
+Read the **full corpus** — every item, not the ready pool and not a title search. Both
 shortcuts lie here and both lie reassuringly:
 
 - The ready listing **truncates by default**, so an absence read from it is frequently an
@@ -144,11 +144,11 @@ shortcuts lie here and both lie reassuringly:
   comes back as "not found" — in the exact words of a true absence. Grep the exported
   corpus instead.
 
-This lens has prior art: a citation-drift check that compares each bead's `updated_at`
-against the newest commit citing it by id. A commit newer than the bead is positive
-evidence the world moved while the bead was not listening. **Reuse it rather than
-rebuilding it** — that instrument exists because someone fixed a condition, cited the bead
-by id in the commit subject, and the bead went on asserting the unfixed state underneath a
+This lens has prior art: a citation-drift check that compares each item's `updated_at`
+against the newest commit citing it by id. A commit newer than the item is positive
+evidence the world moved while the item was not listening. **Reuse it rather than
+rebuilding it** — that instrument exists because someone fixed a condition, cited the item
+by id in the commit subject, and the item went on asserting the unfixed state underneath a
 cluster of work built on it.
 
 ### Lens 3 — docs
@@ -191,7 +191,7 @@ three lenses, and say plainly that it was a bootstrap.
 
 ### Lens 5 — the forge sweep (issues and pull requests)
 
-Every OPEN issue and pull request with no tracking bead gets one. Use the forge's own
+Every OPEN issue and pull request with no tracking item gets one. Use the forge's own
 CLI or API — `gh` for public repos, the Forgejo API at `${FORGE_URL}` for internal ones.
 `repo_watch.sweep_candidates(items, repo)` turns either forge's JSON into candidate gap
 titles; it reads `number`, `title` and `state`, which is the only ground the two shapes
@@ -199,7 +199,7 @@ share.
 
 **This extends the CI watcher, it does not duplicate it.** A CI watcher reports *run
 state transitions* per workflow — passing→failing, once. This lens reports *open objects
-with no bead*. Different objects, different lifetimes; if you find yourself reporting a
+with no item*. Different objects, different lifetimes; if you find yourself reporting a
 red run here, you are in the wrong lens.
 
 Two details that are easy to get wrong and silent when you do:
@@ -221,9 +221,9 @@ Two details that are easy to get wrong and silent when you do:
 ```python
 r = repo_watch.triage(candidates, corpus, cap=7)
 #  r.mint       -> create these, labelled repo_watch.mint_labels(repo)
-#  r.update     -> an OPEN watch bead already covers this; UPDATE it, do not re-mint
-#  r.duplicate  -> an existing bead covers it; do nothing
-#  r.ambiguous  -> report candidate AND possible bead id; human adjudication required
+#  r.update     -> an OPEN watch item already covers this; UPDATE it, do not re-mint
+#  r.duplicate  -> an existing item covers it; do nothing
+#  r.ambiguous  -> report candidate AND possible item id; human adjudication required
 #  r.held       -> over the cap. Report them: r.withheld_line(7)
 ```
 
@@ -236,12 +236,12 @@ r = repo_watch.triage(candidates, corpus, cap=7)
 > **This is the single most likely way this lens ships broken while appearing to work.**
 > Export the full JSONL corpus and pass that.
 
-**A re-found gap UPDATES its existing watch bead.** Minting a second bead for a gap that
+**A re-found gap UPDATES its existing watch item.** Minting a second item for a gap that
 is already open is how a watcher turns a board into noise across passes rather than within
-one. Two guards on that, both deliberate: a **closed** watch bead is a duplicate, not an
-update — the gap was dealt with, and a genuine regression deserves a new bead with a new
-argument; and a bead a **human** wrote is never updated by the watcher, because a watcher
-editing someone else's bead is how its reports stop being trustworthy.
+one. Two guards on that, both deliberate: a **closed** watch item is a duplicate, not an
+update — the gap was dealt with, and a genuine regression deserves a new item with a new
+argument; and an item a **human** wrote is never updated by the watcher, because a watcher
+editing someone else's item is how its reports stop being trustworthy.
 
 **The cap must SAY what it withheld** — `r.withheld_line(cap)` names the subjects, not just
 a count. A count alone cannot be checked against the next pass, and a cap that silently
@@ -256,8 +256,8 @@ it off.
 the budget and push real findings into the held pile — the pass then reports that it hit the
 cap while minting nothing new, which is the worst of both outcomes.
 
-Closed beads count as duplicates. A gap found and fixed last week must not be re-minted this
-week; if it has genuinely regressed, that is a different bead with a different argument and
+Closed items count as duplicates. A gap found and fixed last week must not be re-minted this
+week; if it has genuinely regressed, that is a different item with a different argument and
 it deserves to be written as one.
 
 Nothing is discarded. Everything over the cap comes back as `held` so the report can name
@@ -272,7 +272,7 @@ is a fact in the record rather than a claim in prose.
 shuttle start repo-watch "$(python3 -c 'import repo_watch,sys; ...')" --agent "$OWNER"
 shuttle advance "$RUN" --step anchor  --agent "$OWNER"   # pending  -> anchored
 shuttle advance "$RUN" --step observe --agent "$OWNER"   # anchored -> observed
-# ... the five lenses, the mint, the report bead ...
+# ... the five lenses, the mint, the report item ...
 shuttle advance "$RUN" --step report  --agent "$OWNER"   # observed -> reported (terminal)
 shuttle export
 ```
@@ -289,14 +289,14 @@ checks each signature.
 
 ## Step 5 — the report
 
-One watch report bead per pass. It must carry, because a reader two weeks from now cannot
+One watch report item per pass. It must carry, because a reader two weeks from now cannot
 reconstruct any of it:
 
 - **the anchor** — the sha observed after fetch, and the run id;
 - **each lens, named, with what it found or that it found nothing.** A lens that found
   nothing is a result and belongs in the report. A lens silently omitted is
   indistinguishable from a lens that was never run;
-- **the mint ledger** — minted, deduped (with the bead each candidate matched), held by cap;
+- **the mint ledger** — minted, deduped (with the item each candidate matched), held by cap;
 - **the safety line** — that nothing in the repository or on the forge was mutated;
 - **evidence for every stated cause**, inline: the command and its output, or the word
   INFERRED.
@@ -310,15 +310,15 @@ Then tell the repo's owner. A report nobody is pointed at is a report nobody rea
 | resolver returns no owner | genuinely unowned, **or** owner recorded only as prose — STOP either way |
 | resolver returns the same owner 3× | denormalised aliases; use `DISTINCT`, it is not ambiguity |
 | anchor read returns 0 rows | you read root scope; the advance is in the **window** graph |
-| bead search finds nothing | search matches **titles only** — grep the corpus |
+| item search finds nothing | search matches **titles only** — grep the corpus |
 | ready pool "does not contain it" | the pool **truncated**; state the limit or do not claim the absence |
 | a lens found nothing | a result — report it, do not omit it |
 | one remote far behind the other | anchor on the wrong one and every lens reads a stale tree |
 | numbers that do not reproduce | you measured in the checkout, not at the anchor |
 
 Description-only forge references whose same-repository title names another number
-are ambiguous, even when the bead is closed. Report each candidate and possible
-covering bead; do not silently suppress it or mint it as definitely untracked.
+are ambiguous, even when the item is closed. Report each candidate and possible
+covering item; do not silently suppress it or mint it as definitely untracked.
 An exact tracker, including a closed tracker, still wins. Always pass `repo=`
 for forge sweep candidates; omitting it disables forge-identity matching.
 
