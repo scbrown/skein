@@ -41,7 +41,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"
           python3 -m venv .test-tools
           .test-tools/bin/python -m pip install --disable-pip-version-check pytest
-          .test-tools/bin/python -m pytest skills -q --junitxml="$WORKDIR/results.xml"
+          .test-tools/bin/python -m pytest skills test_readme_inventory.py scripts/test_build_bundle.py scripts/test_forgejo_release.py -q --junitxml="$WORKDIR/results.xml"
           .test-tools/bin/python - <<'PY'
           import xml.etree.ElementTree as ET
           root = ET.parse('results.xml').getroot()
@@ -51,3 +51,33 @@ jobs:
           if count < 40:
               raise SystemExit(f'only {count} tests ran; required floor is 40')
           PY
+
+  release:
+    name: Forgejo release PR and bundle
+    needs: test
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ci-deploy-key
+    timeout-minutes: 10
+    steps:
+      - name: Propose a release or publish an independently reviewed merged release PR
+        env:
+          FORGEJO_EVENT_NAME: ${{ github.event_name }}
+          FORGEJO_REF: ${{ github.ref }}
+          FORGEJO_SHA: ${{ github.sha }}
+          FORGEJO_SERVER_URL: ${{ github.server_url }}
+          FORGEJO_REPOSITORY: ${{ github.repository }}
+          FORGEJO_TOKEN: ${{ github.token }}
+          SSH_HOST: ${{ vars.FORGE_SSH_HOST }}
+        run: |
+          set -euo pipefail
+          test -n "${SSH_HOST:-}"
+          KEY="$HOME/.ssh/ci_readonly_deploy"
+          test -f "$KEY"
+          export GIT_SSH_COMMAND="ssh -i $KEY -o BatchMode=yes -o StrictHostKeyChecking=yes"
+          RELEASE_WORKDIR=$(mktemp -d)
+          trap 'rm -rf "$RELEASE_WORKDIR"' EXIT
+          git clone "ssh://git@$SSH_HOST/$FORGEJO_REPOSITORY.git" "$RELEASE_WORKDIR/repo"
+          cd "$RELEASE_WORKDIR/repo"
+          git checkout --detach "$FORGEJO_SHA"
+          test "$(git rev-parse HEAD)" = "$FORGEJO_SHA"
+          python3 scripts/forgejo_release.py --execute --output "$RELEASE_WORKDIR/assets"
