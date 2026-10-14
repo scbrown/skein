@@ -75,7 +75,7 @@ auth-enabled graph silently `401`s (see Failure Modes).
    > reporting bug into a corruption bug**: a correct idempotent re-post reads as failed, so the
    > source is not marked ingested, so the next pass ingests it again — and a second episode about
    > the same subject by a different author is not byte-identical, which either forks the entity
-   > under a re-worded name or appends a duplicate `rdfs:comment`. Both ends are silent.
+   > under a re-worded name or revises a reused node description. Preserve identity and omit descriptions on reuse.
 
    Do not trust the optional SPARQL regex self-check — `regex(str(?l))` FILTERs are unreliable
    here. Verify with the control-gated read-back in step 4 instead.
@@ -99,8 +99,8 @@ auth-enabled graph silently `401`s (see Failure Modes).
 
 ### 2. Extract nodes and edges
 Map the material onto the taxonomy in `{baseDir}/references/taxonomy.md`:
-- **Nodes:** `{name, type, description}` — `type` is an entity label from the taxonomy;
-  `description` is a one-line fact.
+- **Nodes:** `{name, type, description}` for new nodes; `{name, type}` for reuse.
+  Keep a governed type on every node; omit description on reuse.
 - **Edges:** `{source, target, relation}` — `relation` from the taxonomy's relationship vocabulary;
   `source`/`target` are node names.
 - Prefer results and learnings (what was done, who did it, what was discovered) over restating the
@@ -153,10 +153,10 @@ curl -s "${GRAPH_URL}/query" -X POST -H 'Content-Type: application/json' \
 
 | Situation | Action |
 |-----------|--------|
-| `${GRAPH_URL}` unreachable, or a non-200 that is **not** a timeout/502 | Do NOT mark the source ingested. Save the assembled `nodes`/`edges` (note: `KNOWLEDGE-PENDING-INGESTION`) so a retry re-runs cleanly. |
-| `count: 0` / `tx_id: 0` with `outcome: unchanged` | **SUCCESS — mark it ingested.** The content was already there, byte-identical. Nothing was written because nothing needed to be. |
-| Timeout, empty body, or `502` | **INDETERMINATE, not failed.** Run the control query, then read twice with a gap. Retry ONCE and only with the identical body; then verify `rdfs:comment` count is 1, not merely that the node is present. |
-| Same node needs a corrected description | Do **not** re-post the episode — that appends a second `rdfs:comment` every time. Replace the one predicate instead (`/set`), then verify the count is 1. |
+| `${GRAPH_URL}` unreachable, or a non-200 that is **not** an indeterminate transport result | Do NOT mark the source ingested. Save the assembled `nodes`/`edges` (note: `KNOWLEDGE-PENDING-INGESTION`) so a retry re-runs cleanly. |
+| `count: 0` / `tx_id: 0` with `outcome: unchanged` | The content hash already exists. Mark ingested only after control-gated reader-path verification confirms the facts. |
+| Timeout, empty body, gateway failure, or HTTP `408` (including a zero-duration timeout) | **INDETERMINATE, not failed.** Run the control query, then read twice with a 15-second gap. Only two absences permit ONE retry with the identical body; then verify `rdfs:comment` count is 1, not merely that the node is present. |
+| Same node needs a corrected description | Omit description on reuse. Current servers revise attributed descriptions and may refuse ambiguous legacy comments. For a deliberate correction use `/set`, then verify the value and count. |
 | **`401 Unauthorized`** on the `POST` | The graph gates writes behind a bearer (reads stay open) and none/an invalid one was sent — auth, NOT an outage. Set `GRAPH_TOKEN` to the write token and retry. A `401` on write while `/query` reads still `200` is the tell: it is auth, not a wedge. |
 | < 2 nodes or < 1 edge extractable | Skip — nothing knowledge-worthy. Say so explicitly. |
 | Referenced source missing | Ingest what's available; don't fail the whole run. |

@@ -153,7 +153,6 @@ chase a premise that no longer holds. So dispatch "go read `<id>`, and read its
 latest state" and let the worker act on the source of truth, not on your snapshot
 of it. This is why the send is a pointer to the id, never a copy of its contents.
 
-<<<<<<< Updated upstream
 ## Coordinating a crew, not just one dispatch
 
 Dispatching one item is above. Running a *crew* — many workers, one coordinator —
@@ -216,7 +215,6 @@ the saturated agent is the least able to notice, driving the cycle is the
 *coordinator's* job, not the worker's. On the fallback path this is the triage
 **CLEAR** decision one notch sharper: high context is a reason to cycle before
 sending, whether or not the new task is related.
-=======
 ## Structural changes: ask yupana BEFORE you dispatch (and before you edit)
 
 A structural change — renaming a symbol, changing a signature, moving a module,
@@ -245,7 +243,6 @@ projected from a Quipu knowledge graph** (rules live in the graph as data;
 yupana enforces them at change time; verdicts carry the rule's own rationale).
 The active habit above is what the hook cannot do for you: it fires when you
 edit — `yupana impact` is for *before you decide what to edit*.
->>>>>>> Stashed changes
 
 Everything below is the fallback path, and the traps in it apply to `st` too —
 it makes the same judgement on the same evidence.

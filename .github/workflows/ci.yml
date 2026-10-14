@@ -31,7 +31,7 @@ jobs:
       - name: Run skill tests
         run: |
           set -o pipefail
-          python -m pytest skills -q --junitxml=/tmp/r.xml | tee /tmp/pytest.log
+          python -m pytest skills test_readme_inventory.py scripts/test_build_bundle.py scripts/test_forgejo_release.py -q --junitxml=/tmp/r.xml | tee /tmp/pytest.log
 
       - name: Assert the suite actually ran
         # THE POINT OF THIS STEP. `pytest` exits 5 when it collects NOTHING, and a

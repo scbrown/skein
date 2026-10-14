@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/skills-13-E39A4E.svg" alt="13 skills"/>
   <img src="https://img.shields.io/badge/skein_runtime-none-3E9E9A.svg" alt="skein ships no runtime"/>
   <img src="https://img.shields.io/badge/install-copy%20a%20directory-8C98A8.svg" alt="Install is copying a directory"/>
-  <img src="https://img.shields.io/badge/drives-bobbin%20·%20quipu%20·%20hank%20·%20st-6C7A89.svg" alt="Drives bobbin, quipu, yupana, shantytown"/>
+  <img src="https://img.shields.io/badge/drives-bobbin%20·%20quipu%20·%20yupana%20·%20st-6C7A89.svg" alt="Drives bobbin, quipu, yupana, shantytown"/>
   <img src="https://img.shields.io/badge/agents-any%20SKILL.md-lightgrey.svg" alt="Works with any agent that reads SKILL.md"/>
 </p>
 

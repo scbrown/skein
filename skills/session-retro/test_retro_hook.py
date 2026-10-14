@@ -117,6 +117,10 @@ class TestDpSignal(unittest.TestCase):
         sys.path.insert(0, HERE)
         import retro_hook
         self.rh = retro_hook
+        original_run = self.rh.subprocess.run
+        original_which = self.rh.shutil.which
+        self.addCleanup(setattr, self.rh.subprocess, "run", original_run)
+        self.addCleanup(setattr, self.rh.shutil, "which", original_which)
 
     def test_absent_dp_hides(self):
         self.rh.shutil.which = lambda _: None
