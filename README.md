@@ -19,6 +19,24 @@
 
 > *A skein is a bundle of threads, tied so it can be carried. Pull one out when you need it.* 🧶
 
+> [!IMPORTANT]
+> **skein is archived.** Each skill now lives in the repository of the tool it drives, so a
+> change to a tool and its skill lands in one place. This repository stays readable; it is no longer
+> updated. Install a skill from its new home:
+>
+> | Skill | New home |
+> |---|---|
+> | `deciding-when-to-ask` | [shantytown/skills/deciding-when-to-ask](https://github.com/scbrown/shantytown/tree/main/skills/deciding-when-to-ask) |
+> | `dispatch-work` | [shantytown/skills/dispatch-work](https://github.com/scbrown/shantytown/tree/main/skills/dispatch-work) |
+> | `notify` | [shantytown/skills/notify](https://github.com/scbrown/shantytown/tree/main/skills/notify) |
+> | `planning-with-files` | [shantytown/skills/planning-with-files](https://github.com/scbrown/shantytown/tree/main/skills/planning-with-files) |
+> | `repo-watch` | [shantytown/skills/repo-watch](https://github.com/scbrown/shantytown/tree/main/skills/repo-watch) |
+> | `session-retro` | [shantytown/skills/session-retro](https://github.com/scbrown/shantytown/tree/main/skills/session-retro) |
+> | `quipu` | [quipu/skills/quipu](https://github.com/scbrown/quipu/tree/main/skills/quipu) |
+> | `graph-extract` | [camayoc/skills/graph-extract](https://github.com/scbrown/camayoc/tree/main/skills/graph-extract) |
+> | `graph-report` | [camayoc/skills/graph-report](https://github.com/scbrown/camayoc/tree/main/skills/graph-report) |
+> | `homelab-deploy`, `homelab-patrol`, `metrics-query`, `stack-watch` | moved to a private operations repository; they were specific to one deployment |
+
 **Skills for LLM coding agents** — Claude Code, Codex, Cursor, Gemini CLI, and anything else that
 reads a `SKILL.md`. Each skill **drives a real tool when that tool is there, and says exactly what
 it cannot do when it isn't.**
